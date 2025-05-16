@@ -325,7 +325,7 @@ def login_to_hats_ladders(driver, auth_method):
     print(f"Navigating to login page: {LOGIN_URL}")
     driver.get(LOGIN_URL)
     # Give the page a moment to fully render all elements before attempting to click
-    time.sleep(5) # You can remove/reduce this sleep once your selectors are stable
+    time.sleep(10) # Increased to 10 seconds. You can reduce this once your selectors are stable.
     wait = WebDriverWait(driver, 20)
 
     if auth_method == "nyc_id":
@@ -338,7 +338,14 @@ def login_to_hats_ladders(driver, auth_method):
         # This targets a button containing the exact text "Continue with NYC.ID".
         nyc_id_signin_button_selector = (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]") 
         if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
-            raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page. Please check selector.")
+            # If safe_click fails (e.g., due to an invisible overlay), try clicking via JavaScript as a fallback
+            print("    Attempting JavaScript click for 'Continue with NYC.ID' button as safe_click failed...")
+            try:
+                button_element = wait.until(EC.presence_of_element_located(nyc_id_signin_button_selector))
+                driver.execute_script("arguments[0].click();", button_element)
+                print("    JavaScript click successful for 'Continue with NYC.ID' button.")
+            except Exception as e:
+                raise Exception(f"Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page even with JavaScript. Error: {e}")
 
         print("Clicked 'Continue with NYC.ID'. Waiting for NYC.ID login page...")
         # Wait for URL to contain the NYC.ID login domain from your .env
@@ -373,20 +380,27 @@ def login_to_hats_ladders(driver, auth_method):
             raise ValueError("Direct login credentials (DIRECT_EMAIL, DIRECT_PASSWORD) not set in .env")
 
         # Hats & Ladders direct login elements (from your screenshot for Hats & Ladders login page)
-        # Username field
+        # Username field (using placeholder text)
         username_field_selector = (By.XPATH, "//input[@placeholder='Enter username']")
         if not safe_send_keys(driver, username_field_selector[0], username_field_selector[1], DIRECT_EMAIL):
             raise Exception("Failed to enter direct email.")
         
-        # Password field
+        # Password field (using placeholder text)
         password_field_selector = (By.XPATH, "//input[@placeholder='Enter password']")
         if not safe_send_keys(driver, password_field_selector[0], password_field_selector[1], DIRECT_PASSWORD):
             raise Exception("Failed to enter direct password.")
         
-        # 'Sign in' button for direct login
+        # 'Sign in' button for direct login (using button text)
         login_button_selector = (By.XPATH, "//button[text()='Sign in']") 
         if not safe_click(driver, login_button_selector[0], login_button_selector[1]):
-             raise Exception("Failed to find or click direct login 'Sign in' button.")
+             # If safe_click fails, try JavaScript click as fallback
+             print("    Attempting JavaScript click for 'Sign in' button as safe_click failed...")
+             try:
+                 button_element = wait.until(EC.presence_of_element_located(login_button_selector))
+                 driver.execute_script("arguments[0].click();", button_element)
+                 print("    JavaScript click successful for 'Sign in' button.")
+             except Exception as e:
+                 raise Exception(f"Failed to find or click direct login 'Sign in' button even with JavaScript. Error: {e}")
         
         print("Direct login attempt complete. Waiting for dashboard...")
         wait.until(EC.url_contains(DASHBOARD_URL)) 
