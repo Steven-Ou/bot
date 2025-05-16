@@ -9,46 +9,29 @@ import time
 import random
 import os
 from dotenv import load_dotenv 
-from twocaptcha import TwoCaptcha # Import the 2Captcha solver library
 
-# Load environment variables from .env file
 load_dotenv()
 
 # --- Configuration (Loaded from .env) ---
-# AUTH_METHOD can now only be 'nyc_id' or 'direct'. Set this in your .env file.
 AUTH_METHOD = os.getenv("AUTH_METHOD", "nyc_id") 
 
-# Credentials for NYC.ID login
 NYC_ID_USERNAME = os.getenv("NYC_ID_USERNAME")
 NYC_ID_PASSWORD = os.getenv("NYC_ID_PASSWORD")
-# IMPORTANT: Verify this exact domain during manual NYC.ID login (e.g., 'id.nyc.gov' or 'login.nyc.gov')
 NYC_ID_LOGIN_DOMAIN = os.getenv("NYC_ID_LOGIN_DOMAIN", "nyc.id") 
-
-# Credentials for Direct Email/Password login
 DIRECT_EMAIL = os.getenv("DIRECT_EMAIL")
 DIRECT_PASSWORD = os.getenv("DIRECT_PASSWORD")
 
-# 2Captcha API Key
-API_KEY_2CAPTCHA = os.getenv("API_KEY_2CAPTCHA")
-if not API_KEY_2CAPTCHA:
-    print("WARNING: 2CAPTCHA_API_KEY is not set in your .env file. CAPTCHA solving will fail.")
-
-# Optional: Specific career climb URL for direct testing (uncomment in main to use and set in .env)
 CAREER_CLIMB_TEST_URL = os.getenv("CAREER_CLIMB_TEST_URL")
 
-# General URLs for Hats & Ladders
-# This URL was identified as the correct Hats & Ladders login page from your screenshot.
 LOGIN_URL = "https://authorize.hatsandladders.com/login?client_id=7fpt2ssn7snaolk5bjnat4pagf&response_type=code&redirect_uri=https://app.hatsandladders.com"
 DASHBOARD_URL = "https://app.hatsandladders.com/climber/dashboard"
 
-# Browser options
 options = webdriver.ChromeOptions()
-# Uncomment the line below to run the browser in the background (headless mode)
 # options.add_argument("--headless") 
-options.add_argument("--disable-gpu") # Recommended for headless mode
-options.add_argument("--window-size=1920,1080") # Set a consistent window size for reliable element finding
-options.add_argument("--no-sandbox") # Required for some environments (e.g., Docker)
-options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems in some environments
+options.add_argument("--disable-gpu") 
+options.add_argument("--window-size=1920,1080") 
+options.add_argument("--no-sandbox") 
+options.add_argument("--disable-dev-shm-usage") 
 
 # --- Helper Functions ---
 
@@ -119,35 +102,6 @@ def safe_send_keys(driver, by_type, selector, text, wait_time=10):
         return False
     except WebDriverException as e:
         print(f"    WebDriver Error sending keys to '{selector}': {e}")
-        return False
-
-def solve_recaptcha(driver, api_key, recaptcha_sitekey, page_url):
-    """
-    Sends reCAPTCHA details to 2Captcha and injects the solved token.
-    Returns True if successful, False otherwise.
-    """
-    if not api_key:
-        print("ERROR: 2CAPTCHA_API_KEY is not configured. Cannot solve CAPTCHA.")
-        return False
-
-    solver = TwoCaptcha(api_key)
-    print(f"    Solving reCAPTCHA for {page_url} with sitekey: {recaptcha_sitekey}...")
-
-    try:
-        result = solver.recaptcha(
-            sitekey=recaptcha_sitekey,
-            url=page_url
-        )
-        token = result['code']
-        print(f"    reCAPTCHA solved. Token received: {token[:15]}...") # Print first 15 chars for privacy
-
-        # Inject the solved token into the hidden g-recaptcha-response textarea
-        driver.execute_script(f'document.getElementById("g-recaptcha-response").value = "{token}";')
-        driver.execute_script(f'document.getElementsByName("g-recaptcha-response")[0].value = "{token}";')
-        print("    Injected reCAPTCHA token into the page.")
-        return True
-    except Exception as e:
-        print(f"    Failed to solve reCAPTCHA: {e}")
         return False
 
 def switch_to_learnosity_iframe(driver, wait_time=20):
@@ -264,7 +218,7 @@ def process_learnosity_activity(driver, wait_time=15):
         print(f"    An unexpected error occurred during Learnosity activity processing: {e}")
         return False
     
-    return False 
+    return False # If none of the scenarios matched or completed successfully
 
 def process_module_activities(driver):
     """
@@ -417,81 +371,30 @@ def login_to_hats_ladders(driver, auth_method):
         wait.until(EC.url_contains(NYC_ID_LOGIN_DOMAIN))
         print(f"Redirected to NYC.ID login page ({driver.current_url}).")
 
-        # --- CAPTCHA Solving on NYC.ID page ---
-        # Look for the reCAPTCHA iframe and attempt to solve it
-        recaptcha_iframe_selector = (By.XPATH, "//iframe[@title='reCAPTCHA' and contains(@src, 'api2/anchor')]")
-        try:
-            print("    Checking for reCAPTCHA iframe...")
-            recaptcha_iframe = wait.until(EC.presence_of_element_located(recaptcha_iframe_selector))
-            recaptcha_src = recaptcha_iframe.get_attribute("src")
-            recaptcha_sitekey = recaptcha_src.split('&k=')[1].split('&')[0]
-            print(f"    reCAPTCHA iframe found. Sitekey: {recaptcha_sitekey}")
+        # 2. Enter NYC.ID username/email
+        # Selectors based on your provided HTML for NYC.ID login page (using precise IDs)
+        nyc_id_username_input_selector = (By.ID, "gigya-loginID") 
+        # Add a short wait specifically for the field to be visible and then try to send keys
+        username_field_element = wait.until(EC.visibility_of_element_located(nyc_id_username_input_selector))
+        username_field_element.clear() # Clear any pre-filled text
+        driver.execute_script("arguments[0].focus();", username_field_element) # Explicitly focus
+        username_field_element.send_keys(NYC_ID_USERNAME)
+        print("    Entered NYC.ID username/email.")
+        time.sleep(random.uniform(0.5, 1.0)) 
 
-            if not solve_recaptcha(driver, API_KEY_2CAPTCHA, recaptcha_sitekey, driver.current_url):
-                raise Exception("Failed to solve reCAPTCHA. Check API key, balance, or reCAPTCHA configuration.")
+        # 3. Enter NYC.ID password
+        nyc_id_password_input_selector = (By.ID, "gigya-password") 
+        password_field_element = wait.until(EC.visibility_of_element_located(nyc_id_password_input_selector))
+        password_field_element.clear() # Clear any pre-filled text
+        driver.execute_script("arguments[0].focus();", password_field_element) # Explicitly focus
+        password_field_element.send_keys(NYC_ID_PASSWORD)
+        print("    Entered NYC.ID password.")
+        time.sleep(random.uniform(0.5, 1.5)) 
 
-            # IMPORTANT: Give the page enough time for reCAPTCHA to validate and update the form state.
-            print("    reCAPTCHA solved. Waiting for validation to complete on page...")
-            time.sleep(5) # Increased from 3 to 5 seconds to give reCAPTCHA more time to validate.
-            
-            # --- After reCAPTCHA, proceed with login fields and button ---
-            # 2. Enter NYC.ID username/email (using precise IDs from your HTML)
-            nyc_id_username_input_selector = (By.ID, "gigya-loginID") 
-            username_field_element = wait.until(EC.visibility_of_element_located(nyc_id_username_input_selector))
-            username_field_element.clear() # Clear any pre-filled text
-            driver.execute_script("arguments[0].focus();", username_field_element) # Explicitly focus
-            username_field_element.send_keys(NYC_ID_USERNAME)
-            print("    Entered NYC.ID username/email.")
-            time.sleep(random.uniform(0.5, 1.0)) 
-
-            # 3. Enter NYC.ID password (using precise IDs from your HTML)
-            nyc_id_password_input_selector = (By.ID, "gigya-password") 
-            password_field_element = wait.until(EC.visibility_of_element_located(nyc_id_password_input_selector))
-            password_field_element.clear() 
-            driver.execute_script("arguments[0].focus();", password_field_element) 
-            password_field_element.send_keys(NYC_ID_PASSWORD)
-            print("    Entered NYC.ID password.")
-            time.sleep(random.uniform(0.5, 1.5)) 
-
-            # 4. Click the NYC.ID login/submit button (using precise type and value from HTML)
-            nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") 
-            if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
-                raise Exception("Failed to click NYC.ID login button after CAPTCHA solution. Please check selector.")
-            else:
-                print("    Successfully clicked login button after reCAPTCHA.")
-
-        except TimeoutException:
-            print("    No reCAPTCHA iframe found on NYC.ID login page, proceeding with login attempts.")
-            # If no CAPTCHA, attempt to log in normally (should only happen if CAPTCHA is conditional)
-            # 2. Enter NYC.ID username/email (using precise IDs)
-            nyc_id_username_input_selector = (By.ID, "gigya-loginID") 
-            username_field_element = wait.until(EC.visibility_of_element_located(nyc_id_username_input_selector))
-            username_field_element.clear() 
-            driver.execute_script("arguments[0].focus();", username_field_element) 
-            username_field_element.send_keys(NYC_ID_USERNAME)
-            print("    Entered NYC.ID username/email.")
-            time.sleep(random.uniform(0.5, 1.0)) 
-
-            # 3. Enter NYC.ID password (using precise IDs)
-            nyc_id_password_input_selector = (By.ID, "gigya-password") 
-            password_field_element = wait.until(EC.visibility_of_element_located(nyc_id_password_input_selector))
-            password_field_element.clear() 
-            driver.execute_script("arguments[0].focus();", password_field_element) 
-            password_field_element.send_keys(NYC_ID_PASSWORD)
-            print("    Entered NYC.ID password.")
-            time.sleep(random.uniform(0.5, 1.5)) 
-
-            # 4. Click the NYC.ID login/submit button (using precise type and value from HTML)
-            nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") 
-            if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
-                raise Exception("Failed to click NYC.ID login button (no CAPTCHA). Please check selector.")
-            else:
-                print("    Successfully clicked login button (no CAPTCHA).")
-
-        except Exception as e:
-            print(f"    Error handling reCAPTCHA or subsequent login fields: {e}")
-            raise Exception(f"reCAPTCHA handling or subsequent login failed: {e}")
-
+        # 4. Click the NYC.ID login/submit button (using precise type and value from HTML)
+        nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") 
+        if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
+            raise Exception("Failed to click NYC.ID login button. Please check selector.")
 
         print("Clicked NYC.ID login button. Waiting for redirect back to Hats & Ladders...")
         wait.until(EC.url_contains(DASHBOARD_URL))
@@ -502,14 +405,18 @@ def login_to_hats_ladders(driver, auth_method):
         if not DIRECT_EMAIL or not DIRECT_PASSWORD:
             raise ValueError("Direct login credentials (DIRECT_EMAIL, DIRECT_PASSWORD) not set in .env")
 
+        # Hats & Ladders direct login elements (from your screenshot for Hats & Ladders login page)
+        # Username field (using placeholder text)
         username_field_selector = (By.XPATH, "//input[@placeholder='Enter username']")
         if not safe_send_keys(driver, username_field_selector[0], username_field_selector[1], DIRECT_EMAIL):
             raise Exception("Failed to enter direct email.")
         
+        # Password field (using placeholder text)
         password_field_selector = (By.XPATH, "//input[@placeholder='Enter password']")
         if not safe_send_keys(driver, password_field_selector[0], password_field_selector[1], DIRECT_PASSWORD):
             raise Exception("Failed to enter direct password.")
         
+        # 'Sign in' button for direct login (using button text)
         login_button_selector = (By.XPATH, "//button[text()='Sign in']") 
         if not safe_click(driver, login_button_selector[0], login_button_selector[1]):
              raise Exception("Failed to find or click direct login 'Sign in' button. Please check selector or any overlays.")
@@ -521,7 +428,8 @@ def login_to_hats_ladders(driver, auth_method):
     else:
         raise ValueError(f"Unsupported authentication method: {auth_method}. Check AUTH_METHOD in .env. Must be 'nyc_id' or 'direct'.")
     
-    wait.until(EC.presence_of_element_located((By.XPATH, "//h6[contains(text(), '405 XP')]"))) 
+    # Final check for dashboard loading
+    wait.until(EC.presence_of_element_located((By.XPATH, "//h6[contains(text(), '405 XP')]"))) # Or any other unique dashboard element
     print("Hats & Ladders dashboard fully loaded and confirmed.")
     return True
 
@@ -540,7 +448,21 @@ if __name__ == "__main__":
             print("Login failed. Exiting script.")
             exit()
 
+        # --- Choose your automation path here ---
+        
+        # Option A: Process assignments found on the dashboard
+        # This will navigate to the dashboard, find assignments, and process them one by one.
         process_dashboard_assignments(driver)
+
+        # Option B: Directly go to a specific career climb module
+        # Uncomment the lines below AND make sure CAREER_CLIMB_TEST_URL is set in your .env
+        # if CAREER_CLIMB_TEST_URL:
+        #     print(f"\n--- Directly navigating to specific career climb: {CAREER_CLIMB_TEST_URL} ---")
+        #     driver.get(CAREER_CLIMB_TEST_URL)
+        #     process_module_activities(driver)
+        # else:
+        #     print("CAREER_CLIMB_TEST_URL not set in .env. Skipping direct career climb navigation.")
+
 
     except Exception as e:
         print(f"\nAn unrecoverable error occurred: {e}")
