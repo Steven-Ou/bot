@@ -7,15 +7,15 @@ import time
 import random
 
 # --- Configuration ---
-# Your Google credentials (for the Hats & Ladders login)
-GOOGLE_EMAIL = "your-google-email@gmail.com"
-GOOGLE_PASSWORD = "your-google-password"
+# Your NYC.ID credentials
+NYC_ID_USERNAME = "your-nyc-id-username"
+NYC_ID_PASSWORD = "your-nyc-id-password"
 
 # URLs for Hats & Ladders
-login_url = "https://hatsandladders.com/login" # This should still be the initial entry point
-dashboard_url = "https://hatsandladders.com/climber/dashboard" 
+login_url = "https://hatsandladders.com/login" # Initial login page
+dashboard_url = "https://hatsandladders.com/climber/dashboard" # Expected URL after successful login
 
-# Browser options
+# Browser options (same as before)
 options = webdriver.ChromeOptions()
 # options.add_argument("--headless")
 options.add_argument("--disable-gpu")
@@ -23,96 +23,72 @@ options.add_argument("--window-size=1920,1080")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 
-# --- Helper Functions (Revised and New) ---
+# --- Helper Functions (safe_click, switch_to_learnosity_iframe, process_learnosity_activity,
+#      process_module_activities, process_dashboard_assignments are the same as before) ---
 
-def safe_click(driver, by_type, selector, wait_time=10):
-    """Waits for an element to be clickable and clicks it."""
-    try:
-        element = WebDriverWait(driver, wait_time).until(
-            EC.element_to_be_clickable((by_type, selector))
-        )
-        element.click()
-        return True
-    except TimeoutException:
-        print(f"    Timeout: Element '{selector}' not clickable after {wait_time}s.")
-        return False
-    except NoSuchElementException:
-        print(f"    Error: Element '{selector}' not found.")
-        return False
-    except WebDriverException as e:
-        print(f"    WebDriver Error clicking '{selector}': {e}")
-        return False
+# You'll need to include the definitions for:
+# - safe_click
+# - switch_to_learnosity_iframe
+# - process_learnosity_activity
+# - process_module_activities
+# - process_dashboard_assignments
+# from the previous "complete program" section.
 
-# ... (Previous safe_send_keys and switch_to_learnosity_iframe functions can remain, or be added if they were removed) ...
-
-def login_to_hats_ladders_with_google(driver, email, password, login_page_url, dashboard_check_url):
+def login_to_hats_ladders_with_nyc_id(driver, username, password, login_page_url, dashboard_check_url):
     """
-    Automates login to Hats & Ladders via the 'Sign in with Google' button.
+    Automates login to Hats & Ladders via the 'Continue with NYC.ID' button.
     """
     print("Navigating to login page...")
     driver.get(login_page_url)
     wait = WebDriverWait(driver, 20)
 
     try:
-        # 1. Find and click the "Sign in with Google" button on Hats & Ladders
-        print("Looking for 'Sign in with Google' button...")
-        # You'll need to inspect the Hats & Ladders login page to find the exact selector for this button.
-        # It might be a button with text "Sign in with Google", or an SVG icon, or a specific class.
-        # Example XPath: //button[contains(., 'Sign in with Google')] OR //div[contains(@aria-label, 'Sign in with Google')]
-        google_signin_button_selector = (By.XPATH, "//button[contains(., 'Sign in with Google') or contains(., 'Continue with Google')] | //div[contains(@aria-label, 'Sign in with Google')]")
+        # 1. Find and click the "Continue with NYC.ID" button on Hats & Ladders
+        print("Looking for 'Continue with NYC.ID' button...")
+        # *** YOU MUST INSPECT THE HATS & LADDERS LOGIN PAGE TO FIND THE EXACT SELECTOR FOR THIS BUTTON. ***
+        # It could be button text, an image, or a specific data-testid.
+        # Example: //button[contains(., 'Continue with NYC.ID')]
+        nyc_id_signin_button_selector = (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]")
         
-        # Wait for and click the Google sign-in button
-        if not safe_click(driver, google_signin_button_selector[0], google_signin_button_selector[1]):
-            print("Could not find or click 'Sign in with Google' button. Please check selector.")
+        if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
+            print("Could not find or click 'Continue with NYC.ID' button. Please check selector.")
             return False
 
-        print("Clicked 'Sign in with Google'. Waiting for Google login page...")
+        print("Clicked 'Continue with NYC.ID'. Waiting for NYC.ID login page...")
 
-        # 2. Wait for Google's login page to load (URL changes to accounts.google.com)
-        wait.until(EC.url_contains("accounts.google.com"))
-        print("Redirected to Google login page.")
+        # 2. Wait for NYC.ID's login page to load (URL will change to NYC.ID's domain)
+        # You'll need to know the domain of the NYC.ID login page (e.g., 'login.nyc.gov')
+        nyc_id_domain = "login.nyc.gov" # *** REPLACE WITH THE ACTUAL NYC.ID LOGIN DOMAIN ***
+        wait.until(EC.url_contains(nyc_id_domain))
+        print(f"Redirected to NYC.ID login page ({driver.current_url}).")
 
-        # 3. Enter Google email
-        # Google's email input field usually has an ID like 'identifierId'
-        email_input_selector = (By.ID, "identifierId")
-        email_field = wait.until(EC.presence_of_element_located(email_input_selector))
-        email_field.send_keys(email)
-        print("Entered Google email.")
+        # 3. Enter NYC.ID username/email
+        # *** YOU MUST INSPECT THE NYC.ID LOGIN PAGE TO FIND THE EXACT SELECTOR FOR THE USERNAME INPUT. ***
+        # It could be by ID, name, or a specific XPath.
+        nyc_id_username_input_selector = (By.ID, "nyc-id-username-field") # PLACEHOLDER
+        username_field = wait.until(EC.presence_of_element_located(nyc_id_username_input_selector))
+        username_field.send_keys(username)
+        print("Entered NYC.ID username.")
 
-        # Click the "Next" button for email
-        # Google's next button often has an ID like 'identifierNext' or 'idp-next'
-        email_next_button_selector = (By.ID, "identifierNext")
-        if not safe_click(driver, email_next_button_selector[0], email_next_button_selector[1]):
-            # Fallback if 'identifierNext' isn't found (sometimes it's a generic button)
-            print("Could not find 'identifierNext' button directly. Trying generic next button.")
-            email_next_button_selector = (By.XPATH, "//div[@id='emailNext'] | //button[contains(.,'Next')]")
-            if not safe_click(driver, email_next_button_selector[0], email_next_button_selector[1]):
-                print("Failed to click Google email next button.")
-                return False
-        
-        time.sleep(random.uniform(1, 2)) # Small pause for Google to process email
-
-        # 4. Enter Google password
-        # Google's password input field usually has a name like 'password' or ID 'password'
-        password_input_selector = (By.NAME, "password")
-        password_field = wait.until(EC.presence_of_element_located(password_input_selector))
+        # 4. Enter NYC.ID password
+        # *** YOU MUST INSPECT THE NYC.ID LOGIN PAGE TO FIND THE EXACT SELECTOR FOR THE PASSWORD INPUT. ***
+        nyc_id_password_input_selector = (By.ID, "nyc-id-password-field") # PLACEHOLDER
+        password_field = wait.until(EC.presence_of_element_located(nyc_id_password_input_selector))
         password_field.send_keys(password)
-        print("Entered Google password.")
+        print("Entered NYC.ID password.")
+        
+        time.sleep(random.uniform(0.5, 1.5)) # Small pause before clicking login
 
-        # Click the "Next" button for password
-        # Google's next button for password often has an ID like 'passwordNext'
-        password_next_button_selector = (By.ID, "passwordNext")
-        if not safe_click(driver, password_next_button_selector[0], password_next_button_selector[1]):
-            # Fallback if 'passwordNext' isn't found
-            print("Could not find 'passwordNext' button directly. Trying generic next button.")
-            password_next_button_selector = (By.XPATH, "//div[@id='passwordNext'] | //button[contains(.,'Next')]")
-            if not safe_click(driver, password_next_button_selector[0], password_next_button_selector[1]):
-                print("Failed to click Google password next button.")
-                return False
+        # 5. Click the NYC.ID login/submit button
+        # *** YOU MUST INSPECT THE NYC.ID LOGIN PAGE TO FIND THE EXACT SELECTOR FOR THE LOGIN BUTTON. ***
+        nyc_id_login_button_selector = (By.ID, "nyc-id-login-button") # PLACEHOLDER
+        if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
+            print("Failed to click NYC.ID login button. Please check selector.")
+            return False
 
-        print("Clicked Google password next button. Waiting for redirect back to Hats & Ladders...")
+        print("Clicked NYC.ID login button. Waiting for redirect back to Hats & Ladders...")
 
-        # 5. Wait for redirect back to Hats & Ladders (URL should contain dashboard_check_url)
+        # 6. Wait for redirect back to Hats & Ladders (URL should contain dashboard_check_url)
         wait.until(EC.url_contains(dashboard_check_url))
         print("Successfully redirected back to Hats & Ladders dashboard.")
         
@@ -128,11 +104,8 @@ def login_to_hats_ladders_with_google(driver, email, password, login_page_url, d
         print("Login process failed: An expected element was not found.")
         return False
     except Exception as e:
-        print(f"An unexpected error occurred during Google login: {e}")
+        print(f"An unexpected error occurred during NYC.ID login: {e}")
         return False
-
-# --- (Other helper functions like switch_to_learnosity_iframe, process_learnosity_activity,
-#      and process_module_activities remain the same as in the previous complete script) ---
 
 # --- Main Execution Flow (Revised) ---
 if __name__ == "__main__":
@@ -141,15 +114,13 @@ if __name__ == "__main__":
         driver = webdriver.Chrome(options=options)
         print("Browser started.")
 
-        # 1. Login using the new Google login function
-        if not login_to_hats_ladders_with_google(driver, GOOGLE_EMAIL, GOOGLE_PASSWORD, login_url, dashboard_url):
-            print("Google login failed. Exiting.")
+        # 1. Login using the new NYC.ID login function
+        if not login_to_hats_ladders_with_nyc_id(driver, NYC_ID_USERNAME, NYC_ID_PASSWORD, login_url, dashboard_url):
+            print("NYC.ID login failed. Exiting.")
             exit()
 
-        # --- Choose your automation path ---
-        
+        # --- Choose your automation path (as in previous script) ---
         # OPTION 1: Process assignments from the dashboard
-        # (This function is from the previous script and assumes you have updated its internal selectors for your dashboard)
         # process_dashboard_assignments(driver) 
 
         # OPTION 2: Directly go to a specific career climb (uncomment if you prefer this)
