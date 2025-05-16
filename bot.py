@@ -24,13 +24,13 @@ DIRECT_PASSWORD = os.getenv("DIRECT_PASSWORD")
 CAREER_CLIMB_TEST_URL = os.getenv("CAREER_CLIMB_TEST_URL")
 
 # General URLs for Hats & Ladders
-# This URL was identified as the correct login page from your screenshot
+# This URL was identified as the correct Hats & Ladders login page from your screenshot
 LOGIN_URL = "https://authorize.hatsandladders.com/login?client_id=7fpt2ssn7snaolk5bjnat4pagf&response_type=code&redirect_uri=https://app.hatsandladders.com"
 DASHBOARD_URL = "https://app.hatsandladders.com/climber/dashboard"
 
 # Browser options
 options = webdriver.ChromeOptions()
-# options.add_argument("--headless") # Uncomment to run without a visible browser window
+# options.add_argument("--headless") # Uncomment to run without a visible browser window for debugging
 options.add_argument("--disable-gpu")
 options.add_argument("--window-size=1920,1080") # Set a consistent window size
 options.add_argument("--no-sandbox") # Required for some environments (e.g., Docker)
@@ -116,8 +116,7 @@ def process_learnosity_activity(driver, wait_time=15):
             
             if answer_options:
                 # --- QUIZ ANSWER LOGIC ---
-                # This is where your "cheat" logic would go.
-                # Current simple strategy: Pick the first available option
+                # Current simple strategy: Pick the first available option (customize this for correct answers)
                 selected_option = answer_options[0] 
                 print(f"    Selecting answer: '{selected_option.text if selected_option.text else '(no visible text)'}'")
                 selected_option.click() # Click the label or the clickable part of the option
@@ -215,6 +214,7 @@ def process_module_activities(driver):
         time.sleep(random.uniform(2, 4)) 
         
         try:
+            # Module navigation 'Next' button (right-arrow icon) on the Hats & Ladders main pages
             module_next_button_selector = (By.XPATH, "//button[contains(@class, 'MuiIconButton-root') and .//*[name()='svg' and @data-icon='eva-arrow-ios-forward-outline']]")
             
             if not safe_click(driver, module_next_button_selector[0], module_next_button_selector[1]):
@@ -223,7 +223,7 @@ def process_module_activities(driver):
             
             print(f"Clicked module navigation 'Next' button. (Activity {processed_activities_count + 1})")
             processed_activities_count += 1
-            time.sleep(random.uniform(3, 5)) 
+            time.sleep(random.uniform(3, 5)) # Wait for the new activity to load, possibly iframe
 
             if switch_to_learnosity_iframe(driver):
                 if process_learnosity_activity(driver):
@@ -263,6 +263,9 @@ def process_dashboard_assignments(driver):
         wait.until(EC.presence_of_element_located((By.XPATH, "//h6[contains(text(), 'My Assignments')] | //h3[contains(text(), 'Dashboard')]")))
         print("Landed on dashboard.")
 
+        # --- IMPORTANT: Customize these selectors for your dashboard's assignment list ---
+        # Look for elements that represent individual assignments.
+        # This XPath is a guess based on the HTML snippet you provided previously.
         assignment_list_items_selector = (By.XPATH, "//div[contains(@class, 'MuiBox-root') and .//h6[contains(text(), 'My Assignments')]]/following-sibling::div[contains(@class, 'MuiStack-root')]//div[contains(@class, 'MuiBox-root')]")
         
         assignment_list_items = driver.find_elements(assignment_list_items_selector[0], assignment_list_items_selector[1])
@@ -275,10 +278,12 @@ def process_dashboard_assignments(driver):
 
         for i, assignment_item in enumerate(assignment_list_items):
             try:
+                # Find the title of the assignment within its item block
                 assignment_title_element = assignment_item.find_element(By.XPATH, ".//h6")
                 assignment_title = assignment_title_element.text if assignment_title_element else f"Unknown Assignment {i+1}"
                 
-                start_button_selector = (By.XPATH, ".//button[contains(@class, 'MuiButtonBase-root')]")
+                # Find the link or button to start/continue this specific assignment
+                start_button_selector = (By.XPATH, ".//button[contains(@class, 'MuiButtonBase-root')]") # Or a more specific XPath for the 'start' button
                 
                 print(f"\nProcessing Dashboard Assignment: {assignment_title}")
                 
@@ -312,13 +317,15 @@ def process_dashboard_assignments(driver):
     except Exception as e:
         print(f"An unexpected error occurred during dashboard assignment processing: {e}")
 
-# --- REVISED login_to_hats_ladders function (Google Removed) ---
+# --- REVISED login_to_hats_ladders function (Google Removed, Selectors Updated) ---
 def login_to_hats_ladders(driver, auth_method):
     """
     Handles login based on the specified authentication method.
     """
     print(f"Navigating to login page: {LOGIN_URL}")
     driver.get(LOGIN_URL)
+    # Give the page a moment to fully render all elements before attempting to click
+    time.sleep(5) # You can remove/reduce this sleep once your selectors are stable
     wait = WebDriverWait(driver, 20)
 
     if auth_method == "nyc_id":
@@ -327,7 +334,8 @@ def login_to_hats_ladders(driver, auth_method):
             raise ValueError("NYC.ID credentials (NYC_ID_USERNAME, NYC_ID_PASSWORD) not set in .env")
 
         # 1. Click 'Continue with NYC.ID' button on Hats & Ladders
-        # Selector based on your screenshot for Hats & Ladders login page
+        # Selector based on your screenshot for Hats & Ladders login page.
+        # This targets a button containing the exact text "Continue with NYC.ID".
         nyc_id_signin_button_selector = (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]") 
         if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
             raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page. Please check selector.")
@@ -338,7 +346,7 @@ def login_to_hats_ladders(driver, auth_method):
         print(f"Redirected to NYC.ID login page ({driver.current_url}).")
 
         # 2. Enter NYC.ID username/email
-        # Selectors based on your screenshot for NYC.ID login page
+        # Selectors based on your screenshot for NYC.ID login page (using placeholder text)
         nyc_id_username_input_selector = (By.XPATH, "//input[@placeholder='Email Address or Username']") 
         if not safe_send_keys(driver, nyc_id_username_input_selector[0], nyc_id_username_input_selector[1], NYC_ID_USERNAME):
             raise Exception("Failed to enter NYC.ID username/email.")
@@ -350,7 +358,7 @@ def login_to_hats_ladders(driver, auth_method):
         
         time.sleep(random.uniform(0.5, 1.5))
 
-        # 4. Click the NYC.ID login/submit button
+        # 4. Click the NYC.ID login/submit button (using button text)
         nyc_id_login_button_selector = (By.XPATH, "//button[text()='Login']") 
         if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
             raise Exception("Failed to click NYC.ID login button. Please check selector.")
@@ -365,16 +373,18 @@ def login_to_hats_ladders(driver, auth_method):
             raise ValueError("Direct login credentials (DIRECT_EMAIL, DIRECT_PASSWORD) not set in .env")
 
         # Hats & Ladders direct login elements (from your screenshot for Hats & Ladders login page)
+        # Username field
         username_field_selector = (By.XPATH, "//input[@placeholder='Enter username']")
-        password_field_selector = (By.XPATH, "//input[@placeholder='Enter password']")
-        # Sign in button for direct login (from your screenshot for Hats & Ladders login page)
-        login_button_selector = (By.XPATH, "//button[text()='Sign in']") 
-        
         if not safe_send_keys(driver, username_field_selector[0], username_field_selector[1], DIRECT_EMAIL):
             raise Exception("Failed to enter direct email.")
+        
+        # Password field
+        password_field_selector = (By.XPATH, "//input[@placeholder='Enter password']")
         if not safe_send_keys(driver, password_field_selector[0], password_field_selector[1], DIRECT_PASSWORD):
             raise Exception("Failed to enter direct password.")
         
+        # 'Sign in' button for direct login
+        login_button_selector = (By.XPATH, "//button[text()='Sign in']") 
         if not safe_click(driver, login_button_selector[0], login_button_selector[1]):
              raise Exception("Failed to find or click direct login 'Sign in' button.")
         
@@ -395,7 +405,6 @@ def login_to_hats_ladders(driver, auth_method):
 if __name__ == "__main__":
     driver = None
     try:
-        # Check if login_url is provided and valid
         if not LOGIN_URL:
             raise ValueError("LOGIN_URL is not set in your .env file.")
 
