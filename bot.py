@@ -2,6 +2,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains # Import ActionChains for advanced clicks
+from selenium.webdriver.common.keys import Keys # Import Keys for keyboard input
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException, StaleElementReferenceException
 import time
 import random
@@ -12,57 +14,94 @@ from dotenv import load_dotenv # For loading credentials from .env file
 load_dotenv()
 
 # --- Configuration (Loaded from .env) ---
-# AUTH_METHOD can now only be 'nyc_id' or 'direct'
+# AUTH_METHOD can now only be 'nyc_id' or 'direct'. Set this in your .env file.
 AUTH_METHOD = os.getenv("AUTH_METHOD", "nyc_id") 
+
+# Credentials for NYC.ID login
 NYC_ID_USERNAME = os.getenv("NYC_ID_USERNAME")
 NYC_ID_PASSWORD = os.getenv("NYC_ID_PASSWORD")
-NYC_ID_LOGIN_DOMAIN = os.getenv("NYC_ID_LOGIN_DOMAIN", "nyc.id") # Default, but verify this exact domain during manual login!
+# IMPORTANT: Verify this exact domain during manual NYC.ID login (e.g., 'id.nyc.gov' or 'login.nyc.gov')
+NYC_ID_LOGIN_DOMAIN = os.getenv("NYC_ID_LOGIN_DOMAIN", "nyc.id") 
+
+# Credentials for Direct Email/Password login
 DIRECT_EMAIL = os.getenv("DIRECT_EMAIL")
 DIRECT_PASSWORD = os.getenv("DIRECT_PASSWORD")
 
-# Optional: Specific career climb URL for direct testing (uncomment in main to use)
+# Optional: Specific career climb URL for direct testing (uncomment in main to use and set in .env)
 CAREER_CLIMB_TEST_URL = os.getenv("CAREER_CLIMB_TEST_URL")
 
 # General URLs for Hats & Ladders
-# This URL was identified as the correct Hats & Ladders login page from your screenshot
+# This URL was identified as the correct Hats & Ladders login page from your screenshot.
 LOGIN_URL = "https://authorize.hatsandladders.com/login?client_id=7fpt2ssn7snaolk5bjnat4pagf&response_type=code&redirect_uri=https://app.hatsandladders.com"
 DASHBOARD_URL = "https://app.hatsandladders.com/climber/dashboard"
 
 # Browser options
 options = webdriver.ChromeOptions()
-# options.add_argument("--headless") # Uncomment to run without a visible browser window for debugging
-options.add_argument("--disable-gpu")
-options.add_argument("--window-size=1920,1080") # Set a consistent window size
+# Uncomment the line below to run the browser in the background (headless mode)
+# options.add_argument("--headless") 
+options.add_argument("--disable-gpu") # Recommended for headless mode
+options.add_argument("--window-size=1920,1080") # Set a consistent window size for reliable element finding
 options.add_argument("--no-sandbox") # Required for some environments (e.g., Docker)
-options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems
+options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems in some environments
 
 # --- Helper Functions ---
 
 def safe_click(driver, by_type, selector, wait_time=10):
     """
-    Waits for an element to be clickable and clicks it. 
-    Includes robust error handling and a JavaScript fallback.
+    Waits for an element to be clickable and attempts to click it using multiple strategies.
+    This helps overcome issues with overlays, dynamic content, or complex event listeners.
     """
     try:
+        # Strategy 1: Native Selenium click (most common and preferred)
         element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable((by_type, selector))
         )
-        element.click()
-        return True
-    except (TimeoutException, WebDriverException, StaleElementReferenceException):
-        # If native click fails, try JavaScript click as a fallback
-        print(f"    Native click failed for '{selector}'. Attempting JavaScript click...")
         try:
-            # Re-locate the element to avoid StaleElementReferenceException
-            element = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((by_type, selector))
-            )
-            driver.execute_script("arguments[0].click();", element)
-            print(f"    JavaScript click successful for '{selector}'.")
+            element.click()
+            print(f"    Native click successful for '{selector}'.")
             return True
-        except Exception as e:
-            print(f"    JavaScript click also failed for '{selector}': {e}")
-            return False
+        except (WebDriverException, StaleElementReferenceException) as e:
+            # If native click fails, try JavaScript click as a fallback
+            print(f"    Native click failed for '{selector}': {e}. Trying JavaScript click...")
+
+            # Strategy 2: JavaScript click (bypasses some Selenium clickability checks)
+            try:
+                # Re-locate the element to avoid StaleElementReferenceException
+                element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by_type, selector)))
+                driver.execute_script("arguments[0].click();", element)
+                print(f"    JavaScript click successful for '{selector}'.")
+                return True
+            except Exception as js_e:
+                print(f"    JavaScript click failed for '{selector}': {js_e}. Trying Actions chain...")
+
+                # Strategy 3: Actions Chain (simulates moving mouse to element then clicking)
+                try:
+                    element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by_type, selector)))
+                    ActionChains(driver).move_to_element(element).click().perform()
+                    print(f"    Actions chain click successful for '{selector}'.")
+                    return True
+                except Exception as ac_e:
+                    print(f"    Actions chain click failed for '{selector}': {ac_e}. Trying keyboard ENTER...")
+
+                    # Strategy 4: Send ENTER key (simulates focusing element and pressing Enter)
+                    try:
+                        element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by_type, selector)))
+                        element.send_keys(Keys.ENTER)
+                        print(f"    Keyboard ENTER successful for '{selector}'.")
+                        return True
+                    except Exception as k_e:
+                        print(f"    Keyboard ENTER failed for '{selector}': {k_e}.")
+                        return False # All click strategies failed
+
+    except TimeoutException:
+        print(f"    Timeout: Element '{selector}' not present or clickable after {wait_time}s.")
+        return False
+    except NoSuchElementException:
+        print(f"    Error: Element '{selector}' not found at all.")
+        return False
+    except Exception as final_e:
+        print(f"    An unexpected error occurred during safe_click for '{selector}': {final_e}")
+        return False
 
 def safe_send_keys(driver, by_type, selector, text, wait_time=10):
     """Waits for an element to be present and sends keys to it."""
@@ -85,6 +124,9 @@ def safe_send_keys(driver, by_type, selector, text, wait_time=10):
 def switch_to_learnosity_iframe(driver, wait_time=20):
     """Waits for and switches to the Learnosity iframe."""
     try:
+        # This XPath tries to find an iframe with 'learnosity.com' in its src attribute.
+        # It specifically excludes the 'x-origin-frame' class, which is used for cross-domain communication
+        # and doesn't contain the actual activity content.
         iframe_selector = (By.XPATH, "//iframe[contains(@src, 'learnosity.com') and not(contains(@class, 'x-origin-frame'))]")
         
         WebDriverWait(driver, wait_time).until(
@@ -102,11 +144,13 @@ def switch_to_learnosity_iframe(driver, wait_time=20):
 def process_learnosity_activity(driver, wait_time=15):
     """
     Handles an activity *inside* the Learnosity iframe.
-    This is the most complex part and requires detailed inspection of Learnosity's HTML.
+    This is the most complex part and requires **detailed inspection of Learnosity's HTML**
+    for each activity type. You will need to customize the selectors and logic below.
     """
     print("    Processing activity within Learnosity iframe...")
     try:
-        # --- IMPORTANT: You need to customize these selectors based on actual Learnosity content ---
+        # --- IMPORTANT: YOU NEED TO CUSTOMIZE THESE SELECTORS AND LOGIC ---
+        # These are common patterns, but exact classes/XPaths vary with Learnosity versions and content.
         
         # Scenario 1: Quiz (Multiple Choice/Radio Button/Checkbox)
         try:
@@ -117,78 +161,93 @@ def process_learnosity_activity(driver, wait_time=15):
             print("    Detected Quiz activity.")
             
             # Find all possible answer options (e.g., radio buttons or checkboxes' labels)
+            # This is a generic XPath; adapt based on actual HTML. Look for input[type='radio/checkbox'] parents or div[class*='lrn-choice'].
             answer_options = quiz_question_container.find_elements(By.XPATH, ".//input[@type='radio' or @type='checkbox']/ancestor::label | .//div[contains(@class, 'lrn-choice')]")
             
             if answer_options:
+                # --- QUIZ ANSWER LOGIC ---
+                # This is where your specific answer logic goes.
+                # Example: Always pick the first available option. (Customize for correct answers!)
                 selected_option = answer_options[0] 
                 print(f"    Selecting answer: '{selected_option.text if selected_option.text else '(no visible text)'}'")
                 selected_option.click() 
 
-                time.sleep(random.uniform(1, 2)) 
+                time.sleep(random.uniform(1, 2)) # Simulate reading/thinking time
                 
+                # Find and click the Learnosity submit/next button within the iframe
+                # Common Learnosity button classes/texts: 'lrn-button', 'lrn-save-button', 'Submit', 'Next', 'Check Answer'
                 submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(@class, 'lrn-save-button') or contains(text(), 'Submit') or contains(text(), 'Next') or contains(text(), 'Check Answer')]")
                 if safe_click(driver, submit_button_selector[0], submit_button_selector[1], wait_time=5):
                     print("    Quiz answer submitted.")
                     return True
                 else:
-                    print("    Could not find submit button for quiz.")
+                    print("    Could not find submit button for quiz. Manual intervention may be needed.")
                     return False
             else:
                 print("    No answer options found for quiz.")
                 return False
 
         except TimeoutException:
+            # Not a quiz, try other types
             pass
         
         # Scenario 2: Reflection Prompt (Text Area)
         try:
+            # Look for a text area used for reflections
             reflection_textarea_selector = (By.XPATH, "//textarea[contains(@class, 'lrn-text-input') or @aria-label='Reflection response' or @placeholder='Your answer']")
             reflection_textarea = WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located(reflection_textarea_selector)
             )
             print("    Detected Reflection activity.")
             
+            # Pre-defined response (customize this!) or generate one
             reflection_text = "This is an automated response to the reflection prompt. I found the content insightful and will apply these learnings to my career path."
             reflection_textarea.send_keys(reflection_text)
             print("    Reflection text entered.")
             
-            time.sleep(random.uniform(1, 2)) 
+            time.sleep(random.uniform(1, 2)) # Simulate typing time
             
+            # Find and click the Learnosity submit button
             submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Submit') or contains(text(), 'Done')]")
             if safe_click(driver, submit_button_selector[0], submit_button_selector[1], wait_time=5):
                 print("    Reflection submitted.")
                 return True
             else:
-                print("    Could not find submit button for reflection.")
+                print("    Could not find submit button for reflection. Manual intervention may be needed.")
                 return False
         except TimeoutException:
+            # Not a reflection, try other types
             pass
             
         # Scenario 3: Video or Passive Content (Just wait for it to finish or for a 'continue' button)
         try:
+            # Look for a video player element
             video_player_selector = (By.XPATH, "//*[contains(@class, 'lrn-video-player') or contains(@class, 'lrn-activity-video')]")
             video_player = WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located(video_player_selector)
             )
             print("    Detected Video/Passive content. Waiting for estimated duration...")
-            time.sleep(random.uniform(8, 15)) 
+            # For simplicity, wait a fixed time. In a real scenario, you might parse video duration or look for a 'skip' button.
+            time.sleep(random.uniform(8, 15)) # Simulate watching video
             
+            # After video, look for a "Continue" or "Next" button within the iframe
             continue_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Continue') or contains(text(), 'Next') or contains(text(), 'Done')]")
             if safe_click(driver, continue_button_selector[0], continue_button_selector[1], wait_time=5):
                 print("    Video/Passive content 'Continue' button clicked.")
                 return True
             else:
-                print("    Could not find 'Continue' button after video. Assuming auto-proceed or end of passive content.")
+                print("    Could not find 'Continue' button after video. Assuming auto-proceed or end of passive content. Manual intervention may be needed.")
                 return False 
         except TimeoutException:
             print("    No explicit Video/Passive content detected. Trying generic submission.")
+            # If none of the specific scenarios matched, try a generic submit/next button.
             try:
                 generic_submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Submit') or contains(text(), 'Next') or contains(text(), 'Done')]")
                 if safe_click(driver, generic_submit_button_selector[0], generic_submit_button_selector[1], wait_time=5):
                     print("    Clicked generic Learnosity 'Next/Submit/Done' button.")
                     return True
                 else:
-                    print("    No generic 'Next/Submit/Done' button found in Learnosity. Stuck on this activity.")
+                    print("    No generic 'Next/Submit/Done' button found in Learnosity. Stuck on this activity. Manual intervention may be needed.")
                     return False
             except Exception as e:
                 print(f"    Error trying generic submit in Learnosity: {e}")
@@ -197,7 +256,7 @@ def process_learnosity_activity(driver, wait_time=15):
         print(f"    An unexpected error occurred during Learnosity activity processing: {e}")
         return False
     
-    return False
+    return False # If none of the scenarios matched or completed successfully
 
 def process_module_activities(driver):
     """
@@ -209,15 +268,16 @@ def process_module_activities(driver):
     processed_activities_count = 0
 
     while True:
-        time.sleep(random.uniform(2, 4)) 
+        time.sleep(random.uniform(2, 4)) # Small pause for page stability
         
         try:
             # Module navigation 'Next' button (right-arrow icon) on the Hats & Ladders main pages
+            # This XPath targets a button with a right arrow icon (eva-arrow-ios-forward-outline).
             module_next_button_selector = (By.XPATH, "//button[contains(@class, 'MuiIconButton-root') and .//*[name()='svg' and @data-icon='eva-arrow-ios-forward-outline']]")
             
             if not safe_click(driver, module_next_button_selector[0], module_next_button_selector[1]):
                 print("No more module navigation 'Next' buttons found or button not clickable. Assumed all activities in module completed or process ended.")
-                break 
+                break # Exit the loop if no more next buttons are found
             
             print(f"Clicked module navigation 'Next' button. (Activity {processed_activities_count + 1})")
             processed_activities_count += 1
@@ -227,14 +287,15 @@ def process_module_activities(driver):
                 if process_learnosity_activity(driver):
                     print("    Activity in iframe successfully processed.")
                 else:
-                    print("    Failed to process activity in iframe.")
+                    print("    Failed to process activity in iframe. Manual intervention may be needed.")
                 
+                # Always switch back to the main content after trying to handle the iframe
                 driver.switch_to.default_content()
                 print("    Switched back to main page after iframe processing.")
             else:
                 print("    No Learnosity iframe detected for this activity. Assuming main page interaction or completion.")
                 
-            time.sleep(random.uniform(2, 3)) 
+            time.sleep(random.uniform(2, 3)) # Pause before looking for the next module button
 
         except TimeoutException:
             print("No more module navigation 'Next' buttons found. Assumed all activities in module completed or process ended.")
@@ -258,12 +319,13 @@ def process_dashboard_assignments(driver):
     wait = WebDriverWait(driver, 15)
     
     try:
+        # Wait for a known element on the dashboard indicating it's loaded
         wait.until(EC.presence_of_element_located((By.XPATH, "//h6[contains(text(), 'My Assignments')] | //h3[contains(text(), 'Dashboard')]")))
         print("Landed on dashboard.")
 
-        # --- IMPORTANT: Customize these selectors for your dashboard's assignment list ---
+        # --- IMPORTANT: CUSTOMIZE THESE SELECTORS FOR YOUR DASHBOARD'S ASSIGNMENT LIST ---
         # Look for elements that represent individual assignments.
-        # This XPath is a guess based on the HTML snippet you provided previously.
+        # This XPath is a guess based on the HTML snippet you provided previously, you may need to adjust.
         assignment_list_items_selector = (By.XPATH, "//div[contains(@class, 'MuiBox-root') and .//h6[contains(text(), 'My Assignments')]]/following-sibling::div[contains(@class, 'MuiStack-root')]//div[contains(@class, 'MuiBox-root')]")
         
         assignment_list_items = driver.find_elements(assignment_list_items_selector[0], assignment_list_items_selector[1])
@@ -281,13 +343,15 @@ def process_dashboard_assignments(driver):
                 assignment_title = assignment_title_element.text if assignment_title_element else f"Unknown Assignment {i+1}"
                 
                 # Find the link or button to start/continue this specific assignment
+                # This could be an <a> tag, or a <button> with a right arrow icon.
+                # Inspect your dashboard for the correct selector.
                 start_button_selector = (By.XPATH, ".//button[contains(@class, 'MuiButtonBase-root')]") # Or a more specific XPath for the 'start' button
                 
                 print(f"\nProcessing Dashboard Assignment: {assignment_title}")
                 
                 if not safe_click(driver, start_button_selector[0], start_button_selector[1]):
                     print(f"    Failed to click start button for assignment: '{assignment_title}'. Skipping.")
-                    continue 
+                    continue # Try next assignment if this one can't be clicked
                 
                 print(f"    Clicked to open assignment: '{assignment_title}'")
                 time.sleep(random.uniform(4, 6)) 
@@ -315,7 +379,7 @@ def process_dashboard_assignments(driver):
     except Exception as e:
         print(f"An unexpected error occurred during dashboard assignment processing: {e}")
 
-# --- REVISED login_to_hats_ladders function (Robust Click Logic) ---
+# --- Unified login_to_hats_ladders function ---
 def login_to_hats_ladders(driver, auth_method):
     """
     Handles login based on the specified authentication method.
@@ -336,7 +400,7 @@ def login_to_hats_ladders(driver, auth_method):
         # This targets a button containing the exact text "Continue with NYC.ID".
         nyc_id_signin_button_selector = (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]") 
         
-        # Using the robust safe_click which includes JavaScript fallback
+        # Using the robust safe_click which includes JavaScript fallback and ActionChains/Keys
         if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
             raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page. Please check selector or any overlays.")
 
