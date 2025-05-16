@@ -25,8 +25,8 @@ DIRECT_PASSWORD = os.getenv("DIRECT_PASSWORD")
 CAREER_CLIMB_TEST_URL = os.getenv("CAREER_CLIMB_TEST_URL")
 
 # General URLs for Hats & Ladders
-LOGIN_URL = "https://hatsandladders.com/login"
-DASHBOARD_URL = "https://hatsandladders.com/climber/dashboard"
+LOGIN_URL = "https://authorize.hatsandladders.com/login?client_id=7fpt2ssn7snaolk5bjnat4pagf&response_type=code&redirect_uri=https://app.hatsandladders.com"
+DASHBOARD_URL = "https://app.hatsandladders.com/climber/dashboard"
 
 # Browser options
 options = webdriver.ChromeOptions()
