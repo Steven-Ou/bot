@@ -2,7 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException, StaleElementReferenceException
 import time
 import random
 import os
@@ -39,22 +39,30 @@ options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource pro
 # --- Helper Functions ---
 
 def safe_click(driver, by_type, selector, wait_time=10):
-    """Waits for an element to be clickable and clicks it."""
+    """
+    Waits for an element to be clickable and clicks it. 
+    Includes robust error handling and a JavaScript fallback.
+    """
     try:
         element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable((by_type, selector))
         )
         element.click()
         return True
-    except TimeoutException:
-        print(f"    Timeout: Element '{selector}' not clickable after {wait_time}s.")
-        return False
-    except NoSuchElementException:
-        print(f"    Error: Element '{selector}' not found.")
-        return False
-    except WebDriverException as e:
-        print(f"    WebDriver Error clicking '{selector}': {e}")
-        return False
+    except (TimeoutException, WebDriverException, StaleElementReferenceException):
+        # If native click fails, try JavaScript click as a fallback
+        print(f"    Native click failed for '{selector}'. Attempting JavaScript click...")
+        try:
+            # Re-locate the element to avoid StaleElementReferenceException
+            element = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((by_type, selector))
+            )
+            driver.execute_script("arguments[0].click();", element)
+            print(f"    JavaScript click successful for '{selector}'.")
+            return True
+        except Exception as e:
+            print(f"    JavaScript click also failed for '{selector}': {e}")
+            return False
 
 def safe_send_keys(driver, by_type, selector, text, wait_time=10):
     """Waits for an element to be present and sends keys to it."""
@@ -77,8 +85,6 @@ def safe_send_keys(driver, by_type, selector, text, wait_time=10):
 def switch_to_learnosity_iframe(driver, wait_time=20):
     """Waits for and switches to the Learnosity iframe."""
     try:
-        # This XPath tries to find an iframe with learnosity.com in its src,
-        # but specifically excludes the 'x-origin-frame' used for cross-domain communication.
         iframe_selector = (By.XPATH, "//iframe[contains(@src, 'learnosity.com') and not(contains(@class, 'x-origin-frame'))]")
         
         WebDriverWait(driver, wait_time).until(
@@ -111,20 +117,15 @@ def process_learnosity_activity(driver, wait_time=15):
             print("    Detected Quiz activity.")
             
             # Find all possible answer options (e.g., radio buttons or checkboxes' labels)
-            # This is a very generic XPath; adapt based on actual HTML. Look for input[type='radio/checkbox'] parents.
             answer_options = quiz_question_container.find_elements(By.XPATH, ".//input[@type='radio' or @type='checkbox']/ancestor::label | .//div[contains(@class, 'lrn-choice')]")
             
             if answer_options:
-                # --- QUIZ ANSWER LOGIC ---
-                # Current simple strategy: Pick the first available option (customize this for correct answers)
                 selected_option = answer_options[0] 
                 print(f"    Selecting answer: '{selected_option.text if selected_option.text else '(no visible text)'}'")
-                selected_option.click() # Click the label or the clickable part of the option
+                selected_option.click() 
 
-                time.sleep(random.uniform(1, 2)) # Simulate reading/thinking time
+                time.sleep(random.uniform(1, 2)) 
                 
-                # Find and click the Learnosity submit/next button within the iframe
-                # Common Learnosity button classes include 'lrn-button', 'lrn-save-button', etc.
                 submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(@class, 'lrn-save-button') or contains(text(), 'Submit') or contains(text(), 'Next') or contains(text(), 'Check Answer')]")
                 if safe_click(driver, submit_button_selector[0], submit_button_selector[1], wait_time=5):
                     print("    Quiz answer submitted.")
@@ -137,7 +138,6 @@ def process_learnosity_activity(driver, wait_time=15):
                 return False
 
         except TimeoutException:
-            # Not a quiz, try other types
             pass
         
         # Scenario 2: Reflection Prompt (Text Area)
@@ -152,9 +152,8 @@ def process_learnosity_activity(driver, wait_time=15):
             reflection_textarea.send_keys(reflection_text)
             print("    Reflection text entered.")
             
-            time.sleep(random.uniform(1, 2)) # Simulate typing time
+            time.sleep(random.uniform(1, 2)) 
             
-            # Find and click the Learnosity submit button
             submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Submit') or contains(text(), 'Done')]")
             if safe_click(driver, submit_button_selector[0], submit_button_selector[1], wait_time=5):
                 print("    Reflection submitted.")
@@ -163,7 +162,6 @@ def process_learnosity_activity(driver, wait_time=15):
                 print("    Could not find submit button for reflection.")
                 return False
         except TimeoutException:
-            # Not a reflection, try other types
             pass
             
         # Scenario 3: Video or Passive Content (Just wait for it to finish or for a 'continue' button)
@@ -317,7 +315,7 @@ def process_dashboard_assignments(driver):
     except Exception as e:
         print(f"An unexpected error occurred during dashboard assignment processing: {e}")
 
-# --- REVISED login_to_hats_ladders function (Google Removed, Selectors Updated) ---
+# --- REVISED login_to_hats_ladders function (Robust Click Logic) ---
 def login_to_hats_ladders(driver, auth_method):
     """
     Handles login based on the specified authentication method.
@@ -337,15 +335,10 @@ def login_to_hats_ladders(driver, auth_method):
         # Selector based on your screenshot for Hats & Ladders login page.
         # This targets a button containing the exact text "Continue with NYC.ID".
         nyc_id_signin_button_selector = (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]") 
+        
+        # Using the robust safe_click which includes JavaScript fallback
         if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
-            # If safe_click fails (e.g., due to an invisible overlay), try clicking via JavaScript as a fallback
-            print("    Attempting JavaScript click for 'Continue with NYC.ID' button as safe_click failed...")
-            try:
-                button_element = wait.until(EC.presence_of_element_located(nyc_id_signin_button_selector))
-                driver.execute_script("arguments[0].click();", button_element)
-                print("    JavaScript click successful for 'Continue with NYC.ID' button.")
-            except Exception as e:
-                raise Exception(f"Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page even with JavaScript. Error: {e}")
+            raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page. Please check selector or any overlays.")
 
         print("Clicked 'Continue with NYC.ID'. Waiting for NYC.ID login page...")
         # Wait for URL to contain the NYC.ID login domain from your .env
@@ -393,14 +386,7 @@ def login_to_hats_ladders(driver, auth_method):
         # 'Sign in' button for direct login (using button text)
         login_button_selector = (By.XPATH, "//button[text()='Sign in']") 
         if not safe_click(driver, login_button_selector[0], login_button_selector[1]):
-             # If safe_click fails, try JavaScript click as fallback
-             print("    Attempting JavaScript click for 'Sign in' button as safe_click failed...")
-             try:
-                 button_element = wait.until(EC.presence_of_element_located(login_button_selector))
-                 driver.execute_script("arguments[0].click();", button_element)
-                 print("    JavaScript click successful for 'Sign in' button.")
-             except Exception as e:
-                 raise Exception(f"Failed to find or click direct login 'Sign in' button even with JavaScript. Error: {e}")
+             raise Exception("Failed to find or click direct login 'Sign in' button. Please check selector or any overlays.")
         
         print("Direct login attempt complete. Waiting for dashboard...")
         wait.until(EC.url_contains(DASHBOARD_URL)) 
