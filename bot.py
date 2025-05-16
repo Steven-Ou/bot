@@ -387,7 +387,7 @@ def login_to_hats_ladders(driver, auth_method):
     print(f"Navigating to login page: {LOGIN_URL}")
     driver.get(LOGIN_URL)
     # Give the page a moment to fully render all elements before attempting to click
-    time.sleep(10) # Increased to 10 seconds. You can reduce this once your selectors are stable.
+    time.sleep(30) # Increased to 30 seconds. You can reduce this once your selectors are stable.
     wait = WebDriverWait(driver, 20)
 
     if auth_method == "nyc_id":
