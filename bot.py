@@ -2,47 +2,36 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains # Import ActionChains for advanced clicks
-from selenium.webdriver.common.keys import Keys # Import Keys for keyboard input
+from selenium.webdriver.common.action_chains import ActionChains 
+from selenium.webdriver.common.keys import Keys 
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException, StaleElementReferenceException
 import time
 import random
 import os
-from dotenv import load_dotenv # For loading credentials from .env file
+from dotenv import load_dotenv 
 
-# Load environment variables from .env file
 load_dotenv()
 
 # --- Configuration (Loaded from .env) ---
-# AUTH_METHOD can now only be 'nyc_id' or 'direct'. Set this in your .env file.
 AUTH_METHOD = os.getenv("AUTH_METHOD", "nyc_id") 
 
-# Credentials for NYC.ID login
 NYC_ID_USERNAME = os.getenv("NYC_ID_USERNAME")
 NYC_ID_PASSWORD = os.getenv("NYC_ID_PASSWORD")
-# IMPORTANT: Verify this exact domain during manual NYC.ID login (e.g., 'id.nyc.gov' or 'login.nyc.gov')
 NYC_ID_LOGIN_DOMAIN = os.getenv("NYC_ID_LOGIN_DOMAIN", "nyc.id") 
-
-# Credentials for Direct Email/Password login
 DIRECT_EMAIL = os.getenv("DIRECT_EMAIL")
 DIRECT_PASSWORD = os.getenv("DIRECT_PASSWORD")
 
-# Optional: Specific career climb URL for direct testing (uncomment in main to use and set in .env)
 CAREER_CLIMB_TEST_URL = os.getenv("CAREER_CLIMB_TEST_URL")
 
-# General URLs for Hats & Ladders
-# This URL was identified as the correct Hats & Ladders login page from your screenshot.
 LOGIN_URL = "https://authorize.hatsandladders.com/login?client_id=7fpt2ssn7snaolk5bjnat4pagf&response_type=code&redirect_uri=https://app.hatsandladders.com"
 DASHBOARD_URL = "https://app.hatsandladders.com/climber/dashboard"
 
-# Browser options
 options = webdriver.ChromeOptions()
-# Uncomment the line below to run the browser in the background (headless mode)
 # options.add_argument("--headless") 
-options.add_argument("--disable-gpu") # Recommended for headless mode
-options.add_argument("--window-size=1920,1080") # Set a consistent window size for reliable element finding
-options.add_argument("--no-sandbox") # Required for some environments (e.g., Docker)
-options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems in some environments
+options.add_argument("--disable-gpu") 
+options.add_argument("--window-size=1920,1080") 
+options.add_argument("--no-sandbox") 
+options.add_argument("--disable-dev-shm-usage") 
 
 # --- Helper Functions ---
 
@@ -52,7 +41,6 @@ def safe_click(driver, by_type, selector, wait_time=10):
     This helps overcome issues with overlays, dynamic content, or complex event listeners.
     """
     try:
-        # Strategy 1: Native Selenium click (most common and preferred)
         element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable((by_type, selector))
         )
@@ -61,12 +49,9 @@ def safe_click(driver, by_type, selector, wait_time=10):
             print(f"    Native click successful for '{selector}'.")
             return True
         except (WebDriverException, StaleElementReferenceException) as e:
-            # If native click fails, try JavaScript click as a fallback
             print(f"    Native click failed for '{selector}': {e}. Trying JavaScript click...")
 
-            # Strategy 2: JavaScript click (bypasses some Selenium clickability checks)
             try:
-                # Re-locate the element to avoid StaleElementReferenceException
                 element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by_type, selector)))
                 driver.execute_script("arguments[0].click();", element)
                 print(f"    JavaScript click successful for '{selector}'.")
@@ -74,7 +59,6 @@ def safe_click(driver, by_type, selector, wait_time=10):
             except Exception as js_e:
                 print(f"    JavaScript click failed for '{selector}': {js_e}. Trying Actions chain...")
 
-                # Strategy 3: Actions Chain (simulates moving mouse to element then clicking)
                 try:
                     element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by_type, selector)))
                     ActionChains(driver).move_to_element(element).click().perform()
@@ -83,7 +67,6 @@ def safe_click(driver, by_type, selector, wait_time=10):
                 except Exception as ac_e:
                     print(f"    Actions chain click failed for '{selector}': {ac_e}. Trying keyboard ENTER...")
 
-                    # Strategy 4: Send ENTER key (simulates focusing element and pressing Enter)
                     try:
                         element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by_type, selector)))
                         element.send_keys(Keys.ENTER)
@@ -91,7 +74,7 @@ def safe_click(driver, by_type, selector, wait_time=10):
                         return True
                     except Exception as k_e:
                         print(f"    Keyboard ENTER failed for '{selector}': {k_e}.")
-                        return False # All click strategies failed
+                        return False 
 
     except TimeoutException:
         print(f"    Timeout: Element '{selector}' not present or clickable after {wait_time}s.")
@@ -296,7 +279,6 @@ def process_dashboard_assignments(driver):
     wait = WebDriverWait(driver, 15)
     
     try:
-        # Wait for a known element on the dashboard indicating it's loaded
         wait.until(EC.presence_of_element_located((By.XPATH, "//h6[contains(text(), 'My Assignments')] | //h3[contains(text(), 'Dashboard')]")))
         print("Landed on dashboard.")
 
@@ -388,7 +370,6 @@ def login_to_hats_ladders(driver, auth_method):
             raise ValueError("NYC.ID credentials (NYC_ID_USERNAME, NYC_ID_PASSWORD) not set in .env")
 
         # 1. Click 'Continue with NYC.ID' button on Hats & Ladders
-        # Trying multiple selectors. If you found a unique ID, use that one first!
         # Based on the HTML you provided, it's an <a> tag with a span inside.
         # This is the most accurate selector given your HTML snippet.
         nyc_id_signin_button_selectors = [
@@ -417,19 +398,19 @@ def login_to_hats_ladders(driver, auth_method):
 
         # 2. Enter NYC.ID username/email
         # Selectors based on your screenshot for NYC.ID login page (using placeholder text)
-        nyc_id_username_input_selector = (By.XPATH, "//input[@placeholder='Email Address or Username']") 
+        nyc_id_username_input_selector = (By.XPATH, "//input[@id='gigya-loginID']") # Precise ID from HTML
         if not safe_send_keys(driver, nyc_id_username_input_selector[0], nyc_id_username_input_selector[1], NYC_ID_USERNAME):
             raise Exception("Failed to enter NYC.ID username/email.")
 
         # 3. Enter NYC.ID password
-        nyc_id_password_input_selector = (By.XPATH, "//input[@placeholder='Password']") 
+        nyc_id_password_input_selector = (By.XPATH, "//input[@id='gigya-password']") # Precise ID from HTML
         if not safe_send_keys(driver, nyc_id_password_input_selector[0], nyc_id_password_input_selector[1], NYC_ID_PASSWORD):
             raise Exception("Failed to enter NYC.ID password.")
         
         time.sleep(random.uniform(0.5, 1.5))
 
         # 4. Click the NYC.ID login/submit button (using button text)
-        nyc_id_login_button_selector = (By.XPATH, "//button[text()='Login']") 
+        nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") # Precise type and value from HTML
         if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
             raise Exception("Failed to click NYC.ID login button. Please check selector.")
 
@@ -499,17 +480,4 @@ if __name__ == "__main__":
         #     driver.get(CAREER_CLIMB_TEST_URL)
         #     process_module_activities(driver)
         # else:
-        #     print("CAREER_CLIMB_TEST_URL not set in .env. Skipping direct career climb navigation.")
-
-
-    except Exception as e:
-        print(f"\nAn unrecoverable error occurred: {e}")
-        if driver:
-            driver.save_screenshot("error_screenshot_final.png")
-            print("Screenshot saved as error_screenshot_final.png")
-
-    finally:
-        if driver:
-            print("\nClosing browser...")
-            driver.quit()
-        print("Program finished.")
+        #     print("CARE
