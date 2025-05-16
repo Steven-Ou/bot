@@ -281,9 +281,6 @@ def process_dashboard_assignments(driver):
         wait.until(EC.presence_of_element_located((By.XPATH, "//h6[contains(text(), 'My Assignments')] | //h3[contains(text(), 'Dashboard')]")))
         print("Landed on dashboard.")
 
-        # --- IMPORTANT: CUSTOMIZE THESE SELECTORS FOR YOUR DASHBOARD'S ASSIGNMENT LIST ---
-        # Look for elements that represent individual assignments.
-        # This XPath is a guess based on the HTML snippet you provided previously, you may need to adjust.
         assignment_list_items_selector = (By.XPATH, "//div[contains(@class, 'MuiBox-root') and .//h6[contains(text(), 'My Assignments')]]/following-sibling::div[contains(@class, 'MuiStack-root')]//div[contains(@class, 'MuiBox-root')]")
         
         assignment_list_items = driver.find_elements(assignment_list_items_selector[0], assignment_list_items_selector[1])
@@ -296,12 +293,10 @@ def process_dashboard_assignments(driver):
 
         for i, assignment_item in enumerate(assignment_list_items):
             try:
-                # Find the title of the assignment within its item block
                 assignment_title_element = assignment_item.find_element(By.XPATH, ".//h6")
                 assignment_title = assignment_title_element.text if assignment_title_element else f"Unknown Assignment {i+1}"
                 
-                # Find the link or button to start/continue this specific assignment
-                start_button_selector = (By.XPATH, ".//button[contains(@class, 'MuiButtonBase-root')]") # Or a more specific XPath for the 'start' button
+                start_button_selector = (By.XPATH, ".//button[contains(@class, 'MuiButtonBase-root')]") 
                 
                 print(f"\nProcessing Dashboard Assignment: {assignment_title}")
                 
@@ -344,7 +339,7 @@ def login_to_hats_ladders(driver, auth_method):
     driver.get(LOGIN_URL)
     
     # Wait for potential overlays to disappear or for the page to stabilize
-    wait = WebDriverWait(driver, 30) # Increased wait for initial page load/stabilization
+    wait = WebDriverWait(driver, 30) 
 
     # --- Wait for absence of common loading indicators/overlays (Customize these selectors!) ---
     loading_indicator_selector = (By.XPATH, "//*[contains(@class, 'loading-spinner') or contains(@class, 'modal-overlay') or contains(@class, 'MuiBackdrop-root')]")
@@ -357,7 +352,6 @@ def login_to_hats_ladders(driver, auth_method):
     except NoSuchElementException:
         print("    No common loading indicators/overlays found.")
 
-    # Give the page a moment to fully render all elements after potential overlays
     time.sleep(5) # A short, fixed sleep can help with final rendering before clicking
 
     # --- Now attempt to click the login button ---
@@ -367,32 +361,35 @@ def login_to_hats_ladders(driver, auth_method):
             raise ValueError("NYC.ID credentials (NYC_ID_USERNAME, NYC_ID_PASSWORD) not set in .env")
 
         # 1. Click 'Continue with NYC.ID' button on Hats & Ladders
-        # Based on the HTML you provided, it's an <a> tag with a span inside.
         # This is the most accurate selector given your HTML snippet.
         nyc_id_signin_button_selector = (By.XPATH, "//a[span[text()='Continue with NYC.ID']]") 
         
-        # Using the robust safe_click which includes JavaScript fallback and ActionChains/Keys
         if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
             raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page after trying multiple selectors. Please inspect the element and any overlays.")
 
         print("Clicked 'Continue with NYC.ID'. Waiting for NYC.ID login page...")
-        # Wait for URL to contain the NYC.ID login domain from your .env
         wait.until(EC.url_contains(NYC_ID_LOGIN_DOMAIN))
         print(f"Redirected to NYC.ID login page ({driver.current_url}).")
 
         # 2. Enter NYC.ID username/email
         # Selectors based on your provided HTML for NYC.ID login page (using precise IDs)
         nyc_id_username_input_selector = (By.ID, "gigya-loginID") 
-        if not safe_send_keys(driver, nyc_id_username_input_selector[0], nyc_id_username_input_selector[1], NYC_ID_USERNAME):
-            raise Exception("Failed to enter NYC.ID username/email.")
-        time.sleep(random.uniform(0.5, 1.0)) # Small pause after entering username
+        # Add a short wait specifically for the field to be visible and then try to send keys
+        username_field_element = wait.until(EC.visibility_of_element_located(nyc_id_username_input_selector))
+        username_field_element.clear() # Clear any pre-filled text
+        driver.execute_script("arguments[0].focus();", username_field_element) # Explicitly focus
+        username_field_element.send_keys(NYC_ID_USERNAME)
+        print("    Entered NYC.ID username/email.")
+        time.sleep(random.uniform(0.5, 1.0)) 
 
         # 3. Enter NYC.ID password
         nyc_id_password_input_selector = (By.ID, "gigya-password") 
-        if not safe_send_keys(driver, nyc_id_password_input_selector[0], nyc_id_password_input_selector[1], NYC_ID_PASSWORD):
-            raise Exception("Failed to enter NYC.ID password.")
-        
-        time.sleep(random.uniform(0.5, 1.5)) # Pause after entering password
+        password_field_element = wait.until(EC.visibility_of_element_located(nyc_id_password_input_selector))
+        password_field_element.clear() # Clear any pre-filled text
+        driver.execute_script("arguments[0].focus();", password_field_element) # Explicitly focus
+        password_field_element.send_keys(NYC_ID_PASSWORD)
+        print("    Entered NYC.ID password.")
+        time.sleep(random.uniform(0.5, 1.5)) 
 
         # 4. Click the NYC.ID login/submit button (using precise type and value from HTML)
         nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") 
@@ -447,7 +444,6 @@ if __name__ == "__main__":
         driver = webdriver.Chrome(options=options)
         print("Browser started.")
 
-        # Perform login based on AUTH_METHOD specified in .env
         if not login_to_hats_ladders(driver, AUTH_METHOD):
             print("Login failed. Exiting script.")
             exit()
