@@ -480,4 +480,17 @@ if __name__ == "__main__":
         #     driver.get(CAREER_CLIMB_TEST_URL)
         #     process_module_activities(driver)
         # else:
-        #     print("CARE
+        #     print("CAREER_CLIMB_TEST_URL not set in .env. Skipping direct career climb navigation.")
+
+
+    except Exception as e:
+        print(f"\nAn unrecoverable error occurred: {e}")
+        if driver:
+            driver.save_screenshot("error_screenshot_final.png")
+            print("Screenshot saved as error_screenshot_final.png")
+
+    finally:
+        if driver:
+            print("\nClosing browser...")
+            driver.quit()
+        print("Program finished.")
