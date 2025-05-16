@@ -233,7 +233,6 @@ def process_module_activities(driver):
         time.sleep(random.uniform(2, 4)) 
         
         try:
-            # Module navigation 'Next' button (right-arrow icon) on the Hats & Ladders main pages
             module_next_button_selector = (By.XPATH, "//button[contains(@class, 'MuiIconButton-root') and .//*[name()='svg' and @data-icon='eva-arrow-ios-forward-outline']]")
             
             if not safe_click(driver, module_next_button_selector[0], module_next_button_selector[1]):
@@ -242,7 +241,7 @@ def process_module_activities(driver):
             
             print(f"Clicked module navigation 'Next' button. (Activity {processed_activities_count + 1})")
             processed_activities_count += 1
-            time.sleep(random.uniform(3, 5)) # Wait for the new activity to load, possibly iframe
+            time.sleep(random.uniform(3, 5)) 
 
             if switch_to_learnosity_iframe(driver):
                 if process_learnosity_activity(driver):
@@ -348,8 +347,6 @@ def login_to_hats_ladders(driver, auth_method):
     wait = WebDriverWait(driver, 30) # Increased wait for initial page load/stabilization
 
     # --- Wait for absence of common loading indicators/overlays (Customize these selectors!) ---
-    # You'll need to inspect the page during loading to find selectors for spinners, modals, etc.
-    # These are examples; replace with actual selectors if you identify any blocking elements.
     loading_indicator_selector = (By.XPATH, "//*[contains(@class, 'loading-spinner') or contains(@class, 'modal-overlay') or contains(@class, 'MuiBackdrop-root')]")
     try:
         print("    Waiting for potential loading indicators/overlays to disappear...")
@@ -372,24 +369,11 @@ def login_to_hats_ladders(driver, auth_method):
         # 1. Click 'Continue with NYC.ID' button on Hats & Ladders
         # Based on the HTML you provided, it's an <a> tag with a span inside.
         # This is the most accurate selector given your HTML snippet.
-        nyc_id_signin_button_selectors = [
-            (By.XPATH, "//a[span[text()='Continue with NYC.ID']]"),                 # Most precise for the <a> with span child
-            (By.XPATH, "//a[contains(@href, 'identity_provider=NYC.ID')]"),         # Highly specific by href attribute
-            (By.XPATH, "//a[contains(., 'Continue with NYC.ID')]"),                 # General text in <a> (less precise than span text)
-            (By.XPATH, "//span[@class='idp-button']/a[contains(., 'Continue with NYC.ID')]") # Target via parent span
-        ]
+        nyc_id_signin_button_selector = (By.XPATH, "//a[span[text()='Continue with NYC.ID']]") 
         
-        clicked = False
-        for selector_type, selector_value in nyc_id_signin_button_selectors:
-            print(f"    Trying selector: {selector_value}")
-            if safe_click(driver, selector_type, selector_value, wait_time=10):
-                clicked = True
-                break # Exit loop if click is successful
-            else:
-                print(f"    Selector '{selector_value}' failed to click.")
-
-        if not clicked:
-             raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page after trying multiple selectors. Please inspect the element and any overlays.")
+        # Using the robust safe_click which includes JavaScript fallback and ActionChains/Keys
+        if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
+            raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page after trying multiple selectors. Please inspect the element and any overlays.")
 
         print("Clicked 'Continue with NYC.ID'. Waiting for NYC.ID login page...")
         # Wait for URL to contain the NYC.ID login domain from your .env
@@ -397,20 +381,21 @@ def login_to_hats_ladders(driver, auth_method):
         print(f"Redirected to NYC.ID login page ({driver.current_url}).")
 
         # 2. Enter NYC.ID username/email
-        # Selectors based on your screenshot for NYC.ID login page (using placeholder text)
-        nyc_id_username_input_selector = (By.XPATH, "//input[@id='gigya-loginID']") # Precise ID from HTML
+        # Selectors based on your provided HTML for NYC.ID login page (using precise IDs)
+        nyc_id_username_input_selector = (By.ID, "gigya-loginID") 
         if not safe_send_keys(driver, nyc_id_username_input_selector[0], nyc_id_username_input_selector[1], NYC_ID_USERNAME):
             raise Exception("Failed to enter NYC.ID username/email.")
+        time.sleep(random.uniform(0.5, 1.0)) # Small pause after entering username
 
         # 3. Enter NYC.ID password
-        nyc_id_password_input_selector = (By.XPATH, "//input[@id='gigya-password']") # Precise ID from HTML
+        nyc_id_password_input_selector = (By.ID, "gigya-password") 
         if not safe_send_keys(driver, nyc_id_password_input_selector[0], nyc_id_password_input_selector[1], NYC_ID_PASSWORD):
             raise Exception("Failed to enter NYC.ID password.")
         
-        time.sleep(random.uniform(0.5, 1.5))
+        time.sleep(random.uniform(0.5, 1.5)) # Pause after entering password
 
-        # 4. Click the NYC.ID login/submit button (using button text)
-        nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") # Precise type and value from HTML
+        # 4. Click the NYC.ID login/submit button (using precise type and value from HTML)
+        nyc_id_login_button_selector = (By.XPATH, "//input[@type='submit' and @value='Login']") 
         if not safe_click(driver, nyc_id_login_button_selector[0], nyc_id_login_button_selector[1]):
             raise Exception("Failed to click NYC.ID login button. Please check selector.")
 
