@@ -227,8 +227,7 @@ def process_learnosity_activity(driver, wait_time=15):
                 EC.presence_of_element_located(video_player_selector)
             )
             print("    Detected Video/Passive content. Waiting for estimated duration...")
-            # For simplicity, wait a fixed time. In a real scenario, you might parse video duration or look for a 'skip' button.
-            time.sleep(random.uniform(8, 15)) # Simulate watching video
+            time.sleep(random.uniform(8, 15)) 
             
             # After video, look for a "Continue" or "Next" button within the iframe
             continue_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Continue') or contains(text(), 'Next') or contains(text(), 'Done')]")
@@ -240,7 +239,6 @@ def process_learnosity_activity(driver, wait_time=15):
                 return False 
         except TimeoutException:
             print("    No explicit Video/Passive content detected. Trying generic submission.")
-            # If none of the specific scenarios matched, try a generic submit/next button.
             try:
                 generic_submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Submit') or contains(text(), 'Next') or contains(text(), 'Done')]")
                 if safe_click(driver, generic_submit_button_selector[0], generic_submit_button_selector[1], wait_time=5):
@@ -277,7 +275,7 @@ def process_module_activities(driver):
             
             if not safe_click(driver, module_next_button_selector[0], module_next_button_selector[1]):
                 print("No more module navigation 'Next' buttons found or button not clickable. Assumed all activities in module completed or process ended.")
-                break # Exit the loop if no more next buttons are found
+                break 
             
             print(f"Clicked module navigation 'Next' button. (Activity {processed_activities_count + 1})")
             processed_activities_count += 1
@@ -343,8 +341,6 @@ def process_dashboard_assignments(driver):
                 assignment_title = assignment_title_element.text if assignment_title_element else f"Unknown Assignment {i+1}"
                 
                 # Find the link or button to start/continue this specific assignment
-                # This could be an <a> tag, or a <button> with a right arrow icon.
-                # Inspect your dashboard for the correct selector.
                 start_button_selector = (By.XPATH, ".//button[contains(@class, 'MuiButtonBase-root')]") # Or a more specific XPath for the 'start' button
                 
                 print(f"\nProcessing Dashboard Assignment: {assignment_title}")
@@ -386,23 +382,49 @@ def login_to_hats_ladders(driver, auth_method):
     """
     print(f"Navigating to login page: {LOGIN_URL}")
     driver.get(LOGIN_URL)
-    # Give the page a moment to fully render all elements before attempting to click
-    time.sleep(30) # Increased to 30 seconds. You can reduce this once your selectors are stable.
-    wait = WebDriverWait(driver, 20)
+    
+    # Wait for potential overlays to disappear or for the page to stabilize
+    wait = WebDriverWait(driver, 30) # Increased wait for initial page load/stabilization
 
+    # --- Wait for absence of common loading indicators/overlays (Customize these selectors!) ---
+    # You'll need to inspect the page during loading to find selectors for spinners, modals, etc.
+    # These are examples; replace with actual selectors if you identify any blocking elements.
+    loading_indicator_selector = (By.XPATH, "//*[contains(@class, 'loading-spinner') or contains(@class, 'modal-overlay')]")
+    try:
+        print("    Waiting for potential loading indicators/overlays to disappear...")
+        wait.until(EC.invisibility_of_element_located(loading_indicator_selector))
+        print("    Loading indicators/overlays seem to have disappeared.")
+    except TimeoutException:
+        print("    Timeout waiting for loading indicators/overlays to disappear. Proceeding anyway.")
+    except NoSuchElementException:
+        print("    No common loading indicators/overlays found.")
+
+    # --- Now attempt to click the login button ---
     if auth_method == "nyc_id":
         print(f"Attempting login with NYC.ID ({NYC_ID_USERNAME})...")
         if not NYC_ID_USERNAME or not NYC_ID_PASSWORD:
             raise ValueError("NYC.ID credentials (NYC_ID_USERNAME, NYC_ID_PASSWORD) not set in .env")
 
         # 1. Click 'Continue with NYC.ID' button on Hats & Ladders
-        # Selector based on your screenshot for Hats & Ladders login page.
-        # This targets a button containing the exact text "Continue with NYC.ID".
-        nyc_id_signin_button_selector = (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]") 
+        # Selector based on your screenshot. Trying slightly different XPaths for robustness.
+        nyc_id_signin_button_selectors = [
+            (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]"), # Original
+            (By.XPATH, "//button[text()='Continue with NYC.ID']"),       # Exact text match
+            (By.XPATH, "//button[span[contains(text(), 'Continue with NYC.ID')]]"), # Text inside a span
+            (By.XPATH, "//div[contains(@class, 'MuiButtonBase-root') and contains(., 'Continue with NYC.ID')]") # Match a common parent class
+        ]
         
-        # Using the robust safe_click which includes JavaScript fallback and ActionChains/Keys
-        if not safe_click(driver, nyc_id_signin_button_selector[0], nyc_id_signin_button_selector[1]):
-            raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page. Please check selector or any overlays.")
+        clicked = False
+        for selector_type, selector_value in nyc_id_signin_button_selectors:
+            print(f"    Trying selector: {selector_value}")
+            if safe_click(driver, selector_type, selector_value, wait_time=10):
+                clicked = True
+                break # Exit loop if click is successful
+            else:
+                print(f"    Selector '{selector_value}' failed to click.")
+
+        if not clicked:
+             raise Exception("Failed to click 'Continue with NYC.ID' button on Hats & Ladders login page after trying multiple selectors. Please inspect the element and any overlays.")
 
         print("Clicked 'Continue with NYC.ID'. Waiting for NYC.ID login page...")
         # Wait for URL to contain the NYC.ID login domain from your .env
