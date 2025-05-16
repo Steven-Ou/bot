@@ -124,9 +124,6 @@ def safe_send_keys(driver, by_type, selector, text, wait_time=10):
 def switch_to_learnosity_iframe(driver, wait_time=20):
     """Waits for and switches to the Learnosity iframe."""
     try:
-        # This XPath tries to find an iframe with 'learnosity.com' in its src attribute.
-        # It specifically excludes the 'x-origin-frame' class, which is used for cross-domain communication
-        # and doesn't contain the actual activity content.
         iframe_selector = (By.XPATH, "//iframe[contains(@src, 'learnosity.com') and not(contains(@class, 'x-origin-frame'))]")
         
         WebDriverWait(driver, wait_time).until(
@@ -150,32 +147,23 @@ def process_learnosity_activity(driver, wait_time=15):
     print("    Processing activity within Learnosity iframe...")
     try:
         # --- IMPORTANT: YOU NEED TO CUSTOMIZE THESE SELECTORS AND LOGIC ---
-        # These are common patterns, but exact classes/XPaths vary with Learnosity versions and content.
         
         # Scenario 1: Quiz (Multiple Choice/Radio Button/Checkbox)
         try:
-            # Look for common quiz question containers or question types within Learnosity
             quiz_question_container = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'lrn-question') or contains(@class, 'lrn-multiplechoice') or contains(@class, 'lrn-checkbox')]"))
             )
             print("    Detected Quiz activity.")
             
-            # Find all possible answer options (e.g., radio buttons or checkboxes' labels)
-            # This is a generic XPath; adapt based on actual HTML. Look for input[type='radio/checkbox'] parents or div[class*='lrn-choice'].
             answer_options = quiz_question_container.find_elements(By.XPATH, ".//input[@type='radio' or @type='checkbox']/ancestor::label | .//div[contains(@class, 'lrn-choice')]")
             
             if answer_options:
-                # --- QUIZ ANSWER LOGIC ---
-                # This is where your specific answer logic goes.
-                # Example: Always pick the first available option. (Customize for correct answers!)
                 selected_option = answer_options[0] 
                 print(f"    Selecting answer: '{selected_option.text if selected_option.text else '(no visible text)'}'")
                 selected_option.click() 
 
-                time.sleep(random.uniform(1, 2)) # Simulate reading/thinking time
+                time.sleep(random.uniform(1, 2)) 
                 
-                # Find and click the Learnosity submit/next button within the iframe
-                # Common Learnosity button classes/texts: 'lrn-button', 'lrn-save-button', 'Submit', 'Next', 'Check Answer'
                 submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(@class, 'lrn-save-button') or contains(text(), 'Submit') or contains(text(), 'Next') or contains(text(), 'Check Answer')]")
                 if safe_click(driver, submit_button_selector[0], submit_button_selector[1], wait_time=5):
                     print("    Quiz answer submitted.")
@@ -188,26 +176,22 @@ def process_learnosity_activity(driver, wait_time=15):
                 return False
 
         except TimeoutException:
-            # Not a quiz, try other types
             pass
         
         # Scenario 2: Reflection Prompt (Text Area)
         try:
-            # Look for a text area used for reflections
             reflection_textarea_selector = (By.XPATH, "//textarea[contains(@class, 'lrn-text-input') or @aria-label='Reflection response' or @placeholder='Your answer']")
             reflection_textarea = WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located(reflection_textarea_selector)
             )
             print("    Detected Reflection activity.")
             
-            # Pre-defined response (customize this!) or generate one
             reflection_text = "This is an automated response to the reflection prompt. I found the content insightful and will apply these learnings to my career path."
             reflection_textarea.send_keys(reflection_text)
             print("    Reflection text entered.")
             
-            time.sleep(random.uniform(1, 2)) # Simulate typing time
+            time.sleep(random.uniform(1, 2)) 
             
-            # Find and click the Learnosity submit button
             submit_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Submit') or contains(text(), 'Done')]")
             if safe_click(driver, submit_button_selector[0], submit_button_selector[1], wait_time=5):
                 print("    Reflection submitted.")
@@ -216,12 +200,10 @@ def process_learnosity_activity(driver, wait_time=15):
                 print("    Could not find submit button for reflection. Manual intervention may be needed.")
                 return False
         except TimeoutException:
-            # Not a reflection, try other types
             pass
             
         # Scenario 3: Video or Passive Content (Just wait for it to finish or for a 'continue' button)
         try:
-            # Look for a video player element
             video_player_selector = (By.XPATH, "//*[contains(@class, 'lrn-video-player') or contains(@class, 'lrn-activity-video')]")
             video_player = WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located(video_player_selector)
@@ -229,7 +211,6 @@ def process_learnosity_activity(driver, wait_time=15):
             print("    Detected Video/Passive content. Waiting for estimated duration...")
             time.sleep(random.uniform(8, 15)) 
             
-            # After video, look for a "Continue" or "Next" button within the iframe
             continue_button_selector = (By.XPATH, "//*[contains(@class, 'lrn-button') or contains(text(), 'Continue') or contains(text(), 'Next') or contains(text(), 'Done')]")
             if safe_click(driver, continue_button_selector[0], continue_button_selector[1], wait_time=5):
                 print("    Video/Passive content 'Continue' button clicked.")
@@ -266,11 +247,10 @@ def process_module_activities(driver):
     processed_activities_count = 0
 
     while True:
-        time.sleep(random.uniform(2, 4)) # Small pause for page stability
+        time.sleep(random.uniform(2, 4)) 
         
         try:
             # Module navigation 'Next' button (right-arrow icon) on the Hats & Ladders main pages
-            # This XPath targets a button with a right arrow icon (eva-arrow-ios-forward-outline).
             module_next_button_selector = (By.XPATH, "//button[contains(@class, 'MuiIconButton-root') and .//*[name()='svg' and @data-icon='eva-arrow-ios-forward-outline']]")
             
             if not safe_click(driver, module_next_button_selector[0], module_next_button_selector[1]):
@@ -287,13 +267,12 @@ def process_module_activities(driver):
                 else:
                     print("    Failed to process activity in iframe. Manual intervention may be needed.")
                 
-                # Always switch back to the main content after trying to handle the iframe
                 driver.switch_to.default_content()
                 print("    Switched back to main page after iframe processing.")
             else:
                 print("    No Learnosity iframe detected for this activity. Assuming main page interaction or completion.")
                 
-            time.sleep(random.uniform(2, 3)) # Pause before looking for the next module button
+            time.sleep(random.uniform(2, 3)) 
 
         except TimeoutException:
             print("No more module navigation 'Next' buttons found. Assumed all activities in module completed or process ended.")
@@ -347,7 +326,7 @@ def process_dashboard_assignments(driver):
                 
                 if not safe_click(driver, start_button_selector[0], start_button_selector[1]):
                     print(f"    Failed to click start button for assignment: '{assignment_title}'. Skipping.")
-                    continue # Try next assignment if this one can't be clicked
+                    continue 
                 
                 print(f"    Clicked to open assignment: '{assignment_title}'")
                 time.sleep(random.uniform(4, 6)) 
@@ -389,7 +368,7 @@ def login_to_hats_ladders(driver, auth_method):
     # --- Wait for absence of common loading indicators/overlays (Customize these selectors!) ---
     # You'll need to inspect the page during loading to find selectors for spinners, modals, etc.
     # These are examples; replace with actual selectors if you identify any blocking elements.
-    loading_indicator_selector = (By.XPATH, "//*[contains(@class, 'loading-spinner') or contains(@class, 'modal-overlay')]")
+    loading_indicator_selector = (By.XPATH, "//*[contains(@class, 'loading-spinner') or contains(@class, 'modal-overlay') or contains(@class, 'MuiBackdrop-root')]")
     try:
         print("    Waiting for potential loading indicators/overlays to disappear...")
         wait.until(EC.invisibility_of_element_located(loading_indicator_selector))
@@ -399,6 +378,9 @@ def login_to_hats_ladders(driver, auth_method):
     except NoSuchElementException:
         print("    No common loading indicators/overlays found.")
 
+    # Give the page a moment to fully render all elements after potential overlays
+    time.sleep(5) # A short, fixed sleep can help with final rendering before clicking
+
     # --- Now attempt to click the login button ---
     if auth_method == "nyc_id":
         print(f"Attempting login with NYC.ID ({NYC_ID_USERNAME})...")
@@ -406,12 +388,14 @@ def login_to_hats_ladders(driver, auth_method):
             raise ValueError("NYC.ID credentials (NYC_ID_USERNAME, NYC_ID_PASSWORD) not set in .env")
 
         # 1. Click 'Continue with NYC.ID' button on Hats & Ladders
-        # Selector based on your screenshot. Trying slightly different XPaths for robustness.
+        # Trying multiple selectors. If you found a unique ID, use that one first!
+        # Based on the HTML you provided, it's an <a> tag with a span inside.
+        # This is the most accurate selector given your HTML snippet.
         nyc_id_signin_button_selectors = [
-            (By.XPATH, "//button[contains(., 'Continue with NYC.ID')]"), # Original
-            (By.XPATH, "//button[text()='Continue with NYC.ID']"),       # Exact text match
-            (By.XPATH, "//button[span[contains(text(), 'Continue with NYC.ID')]]"), # Text inside a span
-            (By.XPATH, "//div[contains(@class, 'MuiButtonBase-root') and contains(., 'Continue with NYC.ID')]") # Match a common parent class
+            (By.XPATH, "//a[span[text()='Continue with NYC.ID']]"),                 # Most precise for the <a> with span child
+            (By.XPATH, "//a[contains(@href, 'identity_provider=NYC.ID')]"),         # Highly specific by href attribute
+            (By.XPATH, "//a[contains(., 'Continue with NYC.ID')]"),                 # General text in <a> (less precise than span text)
+            (By.XPATH, "//span[@class='idp-button']/a[contains(., 'Continue with NYC.ID')]") # Target via parent span
         ]
         
         clicked = False
