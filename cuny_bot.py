@@ -20,9 +20,11 @@ COURSES_TO_CHECK = [
     {"number": "381", "target_professor": "Steinberg"},
 ]
 
+INSTRUCTION_MODES = ["In Person", "Online Synchronous"]
+
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Clicks the dropdown, types to filter the list, and explicitly clicks the visible option."""
+    """Restored the robust click/scroll logic that successfully passed steps 1 and 2."""
     print(f"Setting {label_text} to {option_text}...")
 
     try:
@@ -46,9 +48,9 @@ def select_custom_dropdown(driver, label_text, option_text):
         print(f"Typing '{option_text}' to filter the list...")
         actions = ActionChains(driver)
         actions.send_keys(option_text).perform()
-        time.sleep(2)  # Give the UI time to update the filtered list
+        time.sleep(2)
 
-        # 4. Find the filtered option, ensure it is visible, and click it
+        # 4. Find the filtered option, ensure it is visible, and explicitly click it
         print(f"Scrolling down to click '{option_text}'...")
         options = driver.find_elements(
             By.XPATH,
@@ -57,9 +59,7 @@ def select_custom_dropdown(driver, label_text, option_text):
 
         clicked = False
         for opt in options:
-            # Ignore hidden elements and script tags
             if opt.is_displayed() and opt.tag_name.lower() not in ["script", "style"]:
-                # Ensure we aren't accidentally re-clicking the original form label
                 if abs(opt.location["y"] - label.location["y"]) > 10:
                     try:
                         driver.execute_script(
@@ -72,7 +72,7 @@ def select_custom_dropdown(driver, label_text, option_text):
                     except:
                         pass
 
-        # 5. Ultimate Fallback: Just hit Enter to select the filtered option
+        # 5. Fallback: Hit Enter
         if not clicked:
             print("Could not explicitly click, pressing ENTER key...")
             actions = ActionChains(driver)
@@ -86,7 +86,6 @@ def select_custom_dropdown(driver, label_text, option_text):
 
 def check_all_classes():
     chrome_options = Options()
-    # Remove the '#' below once you verify the bot runs successfully from start to finish
     # chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
@@ -97,160 +96,151 @@ def check_all_classes():
     driver = webdriver.Chrome(options=chrome_options)
 
     try:
+        print(f"\n--- Starting Master Search for {SUBJECT_NAME} ---")
+        driver.get("https://globalsearch.cuny.edu/CFGlobalSearchTool/search.jsp")
+
+        # 1. Select Institution
+        inst_checkbox = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located(
+                (By.XPATH, f"//label[contains(text(), '{INSTITUTION_NAME}')]")
+            )
+        )
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", inst_checkbox
+        )
+        driver.execute_script("arguments[0].click();", inst_checkbox)
+
+        time.sleep(3)
+
+        # 2. Select Term
+        select_custom_dropdown(driver, "Term", TERM_NAME)
+
+        # 3. Click Next
+        print("Clicking Next...")
+        next_buttons = WebDriverWait(driver, 15).until(
+            EC.presence_of_all_elements_located(
+                (By.XPATH, "//*[normalize-space(text())='Next' or @value='Next']")
+            )
+        )
+        for btn in next_buttons:
+            if btn.is_displayed():
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block: 'center'});", btn
+                )
+                time.sleep(1)
+                driver.execute_script("arguments[0].click();", btn)
+                break
+
+        time.sleep(5)
+
+        # 4. Select Subject
+        select_custom_dropdown(driver, "Subject", SUBJECT_NAME)
+
+        # 5. Check "Mode of Instruction" Boxes
+        print("Selecting Instruction Modes...")
+        for mode in INSTRUCTION_MODES:
+            try:
+                mode_label = driver.find_element(
+                    By.XPATH, f"//label[contains(., '{mode}')]"
+                )
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block: 'center'});", mode_label
+                )
+                time.sleep(0.5)
+                driver.execute_script("arguments[0].click();", mode_label)
+                print(f" -> Checked {mode}")
+            except Exception:
+                print(f" -> Warning: Could not find {mode} checkbox.")
+
+        # 6. Uncheck "Show Open Classes Only"
+        print("Toggling 'Open Classes Only' OFF...")
+        try:
+            toggle = driver.find_element(
+                By.XPATH, "//*[contains(text(), 'Show Open Classes Only')]"
+            )
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", toggle
+            )
+            time.sleep(1)
+            driver.execute_script("arguments[0].click();", toggle)
+            time.sleep(1)
+        except Exception:
+            pass
+
+        # 7. Click Search
+        print("Clicking Search...")
+        search_buttons = driver.find_elements(
+            By.XPATH, "//*[normalize-space(text())='Search' or @value='Search']"
+        )
+        for btn in search_buttons:
+            if btn.is_displayed():
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block: 'center'});", btn
+                )
+                time.sleep(1)
+                driver.execute_script("arguments[0].click();", btn)
+                break
+
+        print("Waiting for Master List to load...")
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located(
+                (By.XPATH, "//*[contains(text(), 'class section(s) found')]")
+            )
+        )
+        time.sleep(3)
+
+        # 8. Evaluate Each Target Course from the Master List
+        print("\n--- Evaluating Target Courses ---")
         for course in COURSES_TO_CHECK:
             course_num = course["number"]
             target_prof = course["target_professor"]
 
-            print(f"\n--- Checking {SUBJECT_NAME} {course_num} ---")
-
-            driver.get("https://globalsearch.cuny.edu/CFGlobalSearchTool/search.jsp")
-
-            # 1. Select Institution
-            inst_checkbox = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, f"//label[contains(text(), '{INSTITUTION_NAME}')]")
-                )
-            )
-            driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'center'});", inst_checkbox
-            )
-            driver.execute_script("arguments[0].click();", inst_checkbox)
-
-            print("Waiting for background data to load...")
-            time.sleep(4)
-
-            # 2. Select Term
-            select_custom_dropdown(driver, "Term", TERM_NAME)
-
-            # 3. Click Next (Find ALL Next items, click the first VISIBLE one)
-            print("Clicking Next...")
-            next_buttons = WebDriverWait(driver, 15).until(
-                EC.presence_of_all_elements_located(
-                    (By.XPATH, "//*[normalize-space(text())='Next' or @value='Next']")
-                )
-            )
-            for btn in next_buttons:
-                if btn.is_displayed():
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({block: 'center'});", btn
-                    )
-                    time.sleep(1)
-                    driver.execute_script("arguments[0].click();", btn)
-                    break
-
-            print("Waiting for Page 2 to initialize...")
-            time.sleep(5)
-
-            # 4. Select Subject
-            select_custom_dropdown(driver, "Subject", SUBJECT_NAME)
-
-            # 5. Expand Additional Search Criteria
-            print("Expanding Search Criteria...")
             try:
-                add_criteria = driver.find_element(
-                    By.XPATH, "//*[contains(text(), 'Additional Search Criteria')]"
+                # Find the specific course header
+                course_header = driver.find_element(
+                    By.XPATH,
+                    f"//*[contains(text(), ' {course_num} ') or contains(text(), '-{course_num}')]",
                 )
                 driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center'});", add_criteria
+                    "arguments[0].scrollIntoView({block: 'center'});", course_header
                 )
                 time.sleep(1)
-                driver.execute_script("arguments[0].click();", add_criteria)
-                time.sleep(1.5)
-            except Exception:
-                pass
 
-            # 6. Enter Course Number
-            print("Entering Course Number...")
-            try:
-                course_input = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located(
-                        (
-                            By.XPATH,
-                            "//input[contains(@placeholder, 'Course') or contains(@name, 'Course') or contains(@aria-label, 'Course')]",
-                        )
+                # Click it to drop down the table of sections
+                driver.execute_script("arguments[0].click();", course_header)
+                time.sleep(2)
+
+                # Scrape the specific table that appears underneath the header
+                course_table = course_header.find_element(
+                    By.XPATH, "./following::table[1]"
+                )
+                table_text = course_table.text
+
+                if target_prof != "" and target_prof.lower() not in table_text.lower():
+                    print(
+                        f"❌ {course_num}: Professor {target_prof} not found. Skipping."
                     )
-                )
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center'});", course_input
-                )
-                time.sleep(1)
-                course_input.clear()
-                course_input.send_keys(course_num)
-                time.sleep(1)
+                    continue
+
+                prof_label = f"(Prof: {target_prof})" if target_prof else ""
+
+                if "Wait List" in table_text:
+                    print(f"⚠️ WAITLIST seats available for {course_num}!")
+                    trigger_notification(
+                        f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
+                    )
+                elif "Open" in table_text and "Closed" not in table_text:
+                    print(f"🚨 OPEN seats for {course_num}!")
+                    trigger_notification(
+                        f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
+                    )
+                elif "Closed" in table_text:
+                    print(f"🔒 {course_num}: Sections are Closed.")
+                else:
+                    print(f"❓ {course_num}: Status unknown.")
+
             except Exception as e:
-                print(f"Warning: Could not enter course number. {e}")
-
-            # 7. Uncheck "Show Open Classes Only"
-            print("Toggling 'Open Classes Only' OFF...")
-            try:
-                toggle = driver.find_element(
-                    By.XPATH, "//*[contains(text(), 'Show Open Classes Only')]"
-                )
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center'});", toggle
-                )
-                time.sleep(1)
-                driver.execute_script("arguments[0].click();", toggle)
-                time.sleep(1)
-            except Exception:
-                pass
-
-            # 8. Click Search (Find ALL Search items, click the first VISIBLE one)
-            print("Clicking Search...")
-            search_buttons = driver.find_elements(
-                By.XPATH, "//*[normalize-space(text())='Search' or @value='Search']"
-            )
-            for btn in search_buttons:
-                if btn.is_displayed():
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({block: 'center'});", btn
-                    )
-                    time.sleep(1)
-                    driver.execute_script("arguments[0].click();", btn)
-                    break
-
-            # 9. Expand the results container
-            print("Waiting for results...")
-            try:
-                expand_arrow = WebDriverWait(driver, 15).until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, "//*[contains(text(), 'class section(s) found')]")
-                    )
-                )
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center'});", expand_arrow
-                )
-                time.sleep(1)
-                driver.execute_script("arguments[0].click();", expand_arrow)
-                time.sleep(3)
-            except Exception:
-                print(f"No classes found for {course_num}.")
-                continue
-
-            # 10. Analyze the expanded results
-            page_text = driver.find_element(By.TAG_NAME, "body").text
-
-            if target_prof != "" and target_prof.lower() not in page_text.lower():
-                print(
-                    f"❌ Professor {target_prof} not found in the results for {course_num}. Skipping."
-                )
-                continue
-
-            prof_label = f"(Prof: {target_prof})" if target_prof else ""
-            if "Wait List" in page_text:
-                print(f"⚠️ WAITLIST seats available for {course_num}!")
-                trigger_notification(
-                    f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                )
-            elif "Open" in page_text and "Closed" not in page_text:
-                print(f"🚨 OPEN seats for {course_num}!")
-                trigger_notification(
-                    f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                )
-            elif "Closed" in page_text:
-                print(f"🔒 {course_num} is still closed.")
-            else:
-                print(f"Status unknown for {course_num}.")
+                print(f"❌ {course_num}: Could not locate course in the master list.")
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
