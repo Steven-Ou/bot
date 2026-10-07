@@ -2,6 +2,7 @@ import time
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -13,12 +14,55 @@ SUBJECT_NAME = "Computer Science"
 CHECK_INTERVAL = 120
 WEBHOOK_URL = "https://discord.com/api/webhooks/1557076166660071518/7nx3NOi714rSf4dbuMheNfvUUjC6o1ksnWCkJHpw83JCSIOzBsqXQR4ZeMiEJFsa73IG"
 
-# Add as many classes as you want to this list.
-# Leave "target_professor" as an empty string "" if you don't care who teaches it.
 COURSES_TO_CHECK = [
     {"number": "370", "target_professor": ""},
     {"number": "381", "target_professor": "Steinberg"},
 ]
+
+
+def select_custom_dropdown(driver, label_text, option_text):
+    """Helper function to reliably handle CUNY's React-based dynamic dropdowns."""
+    print(f"Setting {label_text} to {option_text}...")
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located(
+            (By.XPATH, f"//*[contains(text(), '{label_text}')]")
+        )
+    )
+
+    try:
+        # Strategy 1: Target the hidden input box, type the text, and hit Enter
+        input_box = driver.find_element(
+            By.XPATH, f"//*[contains(text(), '{label_text}')]/following::input[1]"
+        )
+        driver.execute_script("arguments[0].scrollIntoView(true);", input_box)
+
+        # Clear field and type new value
+        input_box.send_keys(Keys.CONTROL + "a")
+        input_box.send_keys(Keys.BACKSPACE)
+        input_box.send_keys(option_text)
+        time.sleep(1.5)  # Wait for autocomplete to filter
+        input_box.send_keys(Keys.ENTER)
+        return
+    except Exception:
+        pass  # Fallback to Strategy 2 if input isn't interactable
+
+    try:
+        # Strategy 2: Click the dropdown container and select the rendered text option
+        dropdown_container = driver.find_element(
+            By.XPATH, f"//*[contains(text(), '{label_text}')]/following-sibling::div"
+        )
+        driver.execute_script("arguments[0].click();", dropdown_container)
+        time.sleep(2)  # Give the CSS animation time to open the menu
+
+        option_element = driver.find_element(
+            By.XPATH, f"//*[contains(text(), '{option_text}')]"
+        )
+        driver.execute_script("arguments[0].click();", option_element)
+        return
+    except Exception as e:
+        raise Exception(
+            f"Failed to set {label_text}. The element may not be fully loaded. Error: {e}"
+        )
 
 
 def check_all_classes():
@@ -34,7 +78,6 @@ def check_all_classes():
     driver = webdriver.Chrome(options=chrome_options)
 
     try:
-        # Loop through each course in our list
         for course in COURSES_TO_CHECK:
             course_num = course["number"]
             target_prof = course["target_professor"]
@@ -51,19 +94,13 @@ def check_all_classes():
                 )
             )
             driver.execute_script("arguments[0].click();", inst_checkbox)
-            time.sleep(1)
+
+            # CRITICAL WAIT: Must allow CUNY's backend time to fetch the terms for this specific institution
+            print("Waiting for background data to load...")
+            time.sleep(4)
 
             # 3. Select Term
-            term_dropdown = driver.find_element(
-                By.XPATH,
-                "//div[contains(text(), 'Term')]/..//div[contains(@class, 'indicatorContainer')] | //div[contains(text(), 'Term')]/following-sibling::div",
-            )
-            driver.execute_script("arguments[0].click();", term_dropdown)
-            time.sleep(1)
-            term_option = driver.find_element(
-                By.XPATH, f"//*[contains(text(), '{TERM_NAME}')]"
-            )
-            driver.execute_script("arguments[0].click();", term_option)
+            select_custom_dropdown(driver, "Term", TERM_NAME)
             time.sleep(1)
 
             # 4. Click Next
@@ -72,22 +109,12 @@ def check_all_classes():
             )
             driver.execute_script("arguments[0].click();", next_btn)
 
+            # CRITICAL WAIT: Must allow the second page time to initialize its subject lists
+            print("Loading Subject database...")
+            time.sleep(4)
+
             # 5. Select Subject
-            subject_dropdown = WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable(
-                    (
-                        By.XPATH,
-                        "//div[contains(text(), 'Subject')]/..//div[contains(@class, 'indicatorContainer')] | //*[text()='Subject']/following-sibling::*",
-                    )
-                )
-            )
-            driver.execute_script("arguments[0].click();", subject_dropdown)
-            time.sleep(1)
-            subject_option = driver.find_element(
-                By.XPATH,
-                f"//*[text()='{SUBJECT_NAME}'] | //div[contains(text(), '{SUBJECT_NAME}')]",
-            )
-            driver.execute_script("arguments[0].click();", subject_option)
+            select_custom_dropdown(driver, "Subject", SUBJECT_NAME)
             time.sleep(1)
 
             # 6. Expand Additional Search Criteria & Enter Course Number
@@ -137,14 +164,12 @@ def check_all_classes():
             # 10. Analyze the expanded results
             page_text = driver.find_element(By.TAG_NAME, "body").text
 
-            # If looking for a specific professor, skip if they aren't on the page
             if target_prof != "" and target_prof.lower() not in page_text.lower():
                 print(
                     f"❌ Professor {target_prof} not found in the results for {course_num}. Skipping."
                 )
                 continue
 
-            # Check for availability indicators
             prof_label = f"(Prof: {target_prof})" if target_prof else ""
             if "Wait List" in page_text:
                 print(f"⚠️ WAITLIST seats available for {course_num}!")
@@ -163,7 +188,7 @@ def check_all_classes():
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
-        driver.save_screenshot("error_screenshot.png")
+        driver.save_screenshot("error_screenshot_2.jpg")
     finally:
         driver.quit()
 
