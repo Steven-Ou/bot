@@ -2,6 +2,8 @@ import time
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -20,45 +22,38 @@ COURSES_TO_CHECK = [
 
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Forces clicks on React-based dropdowns instead of typing into hidden inputs."""
+    """Simulates a human clicking directly below the label and typing the option."""
     print(f"Setting {label_text} to {option_text}...")
 
     try:
-        # Click the dropdown container to expand the options
-        dropdown_container = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (
-                    By.XPATH,
-                    f"//*[contains(text(), '{label_text}')]/following-sibling::div | //*[contains(text(), '{label_text}')]/..//div[contains(@class, 'indicatorContainer')]",
-                )
-            )
+        # 1. Find the exact text label (e.g., "Term" or "Subject")
+        label = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, f"//*[text()='{label_text}']"))
         )
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center'});", dropdown_container
-        )
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", label)
         time.sleep(1)
-        driver.execute_script("arguments[0].click();", dropdown_container)
 
-        time.sleep(2)  # Give the dropdown menu time to visually open
+        # 2. Move mouse to the label, drop down 35 pixels into the input box, and click
+        actions = ActionChains(driver)
+        actions.move_to_element(label).move_by_offset(0, 35).click().perform()
+        time.sleep(1.5)  # Wait for the dropdown animation to visually open
 
-        # Find the option and click it
-        option_element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (
-                    By.XPATH,
-                    f"//*[text()='{option_text}' or contains(text(), '{option_text}')]",
-                )
-            )
-        )
-        driver.execute_script("arguments[0].click();", option_element)
+        # 3. Type the text to filter the React menu
+        actions = ActionChains(driver)
+        actions.send_keys(option_text).perform()
+        time.sleep(1.5)  # Wait for the autocomplete to process the text
+
+        # 4. Hit Enter to lock in the selection
+        actions.send_keys(Keys.ENTER).perform()
         time.sleep(1)
+
     except Exception as e:
         raise Exception(f"Failed to set {label_text}. Error: {e}")
 
 
 def check_all_classes():
     chrome_options = Options()
-    # Remove the '#' below once you verify the bot clicks the right buttons successfully
+    # Remove the '#' below once you verify the bot runs successfully from start to finish
     # chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
@@ -86,13 +81,12 @@ def check_all_classes():
             )
             driver.execute_script("arguments[0].click();", inst_checkbox)
 
-            # CRITICAL WAIT: Must allow CUNY's backend time to fetch the terms for this specific institution
+            # CRITICAL WAIT: Must allow CUNY's backend time to fetch the terms
             print("Waiting for background data to load...")
             time.sleep(4)
 
-            # 3. Select Term
+            # 3. Select Term (Uses the new ActionChains method)
             select_custom_dropdown(driver, "Term", TERM_NAME)
-            time.sleep(1)
 
             # 4. Click Next
             next_btn = WebDriverWait(driver, 15).until(
@@ -112,7 +106,6 @@ def check_all_classes():
 
             # 5. Select Subject
             select_custom_dropdown(driver, "Subject", SUBJECT_NAME)
-            time.sleep(1)
 
             # 6. Expand Additional Search Criteria & Enter Course Number
             add_criteria = driver.find_element(
@@ -185,9 +178,7 @@ def check_all_classes():
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
-        driver.save_screenshot(
-            "error_screenshot.png"
-        )  # Updated to .png to clear the warning
+        driver.save_screenshot("error_screenshot.png")
     finally:
         driver.quit()
 
