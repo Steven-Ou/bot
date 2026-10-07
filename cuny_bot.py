@@ -182,11 +182,15 @@ def check_all_classes():
                 break
 
         print("Waiting for Master List to load...")
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located(
-                (By.XPATH, "//*[contains(text(), 'class section(s) found')]")
-            )
+        expand_arrow = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'class section(s) found')]"))
         )
+        time.sleep(1)
+        
+        print("Clicking the arrow to expand the Master List...")
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_arrow)
+        time.sleep(1)
+        driver.execute_script("arguments[0].click();", expand_arrow)
         time.sleep(3)
 
         # 8. Evaluate Each Target Course from the Master List
