@@ -206,91 +206,108 @@ def check_all_classes():
         # Fire the click exactly on the <a> tag to trigger the expanding javascript
         driver.execute_script("arguments[0].click();", expand_arrow)
         time.sleep(4)
-        # 8. Evaluate Each Target Course from the Master List
+        # 8. Single-Pass Scanner: Scrape and Compare
         print("\n--- Evaluating Target Courses ---")
 
-        for course in COURSES_TO_CHECK:
-            course_num = course["number"]
-            target_prof = course["target_professor"]
+        # Create a checklist of courses we still need to find
+        courses_left = list(COURSES_TO_CHECK)
 
-            try:
-                print(f"Scanning slowly for {course_num}...")
+        # Reset to the top of the page to start the scan
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1.5)
 
-                # Reset to the top of the page before searching for each course
-                driver.execute_script("window.scrollTo(0, 0);")
-                time.sleep(1.5)
+        # Slowly scroll down the page in one single pass (up to 50 ticks)
+        for _ in range(50):
+            if not courses_left:
+                print("\n✅ All target courses evaluated!")
+                break
 
-                course_header = None
-                found = False
+            # At our current scroll position, scan the visible screen for our missing courses
+            for course in list(courses_left):
+                course_num = course["number"]
+                target_prof = course["target_professor"]
 
-                # Slowly scroll down like a human (up to 40 times)
-                for _ in range(40):
-                    try:
-                        # Look for the course number on the screen
-                        course_header = driver.find_element(
-                            By.XPATH,
-                            f"//*[contains(text(), ' {course_num} ') or contains(text(), '-{course_num}')]",
-                        )
-
-                        # If we find it AND it's physically visible on the screen, stop scrolling!
-                        if course_header.is_displayed():
-                            print(f"Found {course_num} on screen!")
-                            found = True
-                            break
-                    except:
-                        pass  # Not on screen yet, keep scrolling
-
-                    # Scroll down a small amount and wait for the website to load the HTML
-                    driver.execute_script("window.scrollBy(0, 400);")
-                    time.sleep(1)  # Slow 1-second pause to let React render the classes
-
-                if not found:
-                    print(
-                        f"❌ {course_num}: Could not locate course in the master list even after scrolling."
+                try:
+                    # Grab any element containing the course number
+                    elements = driver.find_elements(
+                        By.XPATH, f"//*[contains(text(), '{course_num}')]"
                     )
-                    continue
 
-                # Center it to be safe before clicking
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center'});", course_header
-                )
-                time.sleep(1)
+                    for el in elements:
+                        text = el.text.strip()
+                        # CRITICAL FIX: Ensure we only click the actual header (e.g., "CSCI 370 - Data Structures")
+                        # by ignoring massive page wrappers (which have thousands of characters of text)
+                        if course_num in text and len(text) < 120 and el.is_displayed():
+                            print(f"Found {course_num} on screen! Expanding...")
 
-                # Click the course header to reveal the table
-                driver.execute_script("arguments[0].click();", course_header)
-                time.sleep(2)
+                            # Lock it in the center of the screen
+                            driver.execute_script(
+                                "arguments[0].scrollIntoView({block: 'center'});", el
+                            )
+                            time.sleep(1)
 
-                # Scrape the specific table that appears underneath the header
-                course_table = course_header.find_element(
-                    By.XPATH, "./following::table[1]"
-                )
-                table_text = course_table.text
+                            # Click the header to reveal the class table
+                            driver.execute_script("arguments[0].click();", el)
+                            time.sleep(2)
 
-                if target_prof != "" and target_prof.lower() not in table_text.lower():
-                    print(
-                        f"❌ {course_num}: Professor '{target_prof}' not found. Skipping."
-                    )
-                    continue
+                            try:
+                                # Scrape the specific table that appears underneath the header
+                                course_table = el.find_element(
+                                    By.XPATH, "./following::table[1]"
+                                )
+                                table_text = course_table.text
 
-                prof_label = f"(Prof: {target_prof})" if target_prof else ""
+                                if (
+                                    target_prof != ""
+                                    and target_prof.lower() not in table_text.lower()
+                                ):
+                                    print(
+                                        f"❌ {course_num}: Professor '{target_prof}' not found. Skipping."
+                                    )
+                                else:
+                                    prof_label = (
+                                        f"(Prof: {target_prof})" if target_prof else ""
+                                    )
 
-                if "Wait List" in table_text:
-                    print(f"⚠️ WAITLIST seats available for {course_num}!")
-                    trigger_notification(
-                        f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                    )
-                elif "Open" in table_text and "Closed" not in table_text:
-                    print(f"🚨 OPEN seats for {course_num}!")
-                    trigger_notification(
-                        f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                    )
-                elif "Closed" in table_text:
-                    print(f"🔒 {course_num}: Sections are Closed.")
-                else:
-                    print(f"❓ {course_num}: Status unknown.")
+                                    if "Wait List" in table_text:
+                                        print(
+                                            f"⚠️ WAITLIST seats available for {course_num}!"
+                                        )
+                                        trigger_notification(
+                                            f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
+                                        )
+                                    elif (
+                                        "Open" in table_text
+                                        and "Closed" not in table_text
+                                    ):
+                                        print(f"🚨 OPEN seats for {course_num}!")
+                                        trigger_notification(
+                                            f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
+                                        )
+                                    elif "Closed" in table_text:
+                                        print(f"🔒 {course_num}: Sections are Closed.")
+                                    else:
+                                        print(f"❓ {course_num}: Status unknown.")
+                            except Exception:
+                                print(
+                                    f"❌ {course_num}: Expanded the header but couldn't read the table."
+                                )
 
-            except Exception as e:
-                print(f"❌ {course_num}: Error during evaluation. {e}")
+                            # Cross this course off our checklist so we don't evaluate it again
+                            courses_left.remove(course)
+                            break  # Break out of the element loop and continue scanning
+                except Exception:
+                    pass  # Ignore stale elements or screen shifts, just keep scrolling
+
+            # Scroll down exactly one chunk to load the next set of classes
+            driver.execute_script("window.scrollBy(0, 400);")
+            time.sleep(1.5)  # Wait for React to render the new elements into the HTML
+
+        # If the scan reaches the bottom and items are still on the checklist
+        for missing in courses_left:
+            print(
+                f"❌ {missing['number']}: Could not locate course after scanning the entire master list."
+            )
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
