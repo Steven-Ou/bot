@@ -182,17 +182,26 @@ def check_all_classes():
                 break
 
         print("Waiting for Master List to load...")
+        # Using the exact ID and aria-label revealed in the DevTools screenshot
         expand_arrow = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'class section(s) found')]"))
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    "//a[@id='imageDivLink_inst0' or contains(@aria-label, 'Class Section')]",
+                )
+            )
         )
         time.sleep(1)
-        
-        print("Clicking the arrow to expand the Master List...")
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", expand_arrow)
-        time.sleep(1)
-        driver.execute_script("arguments[0].click();", expand_arrow)
-        time.sleep(3)
 
+        print("Clicking the arrow to expand the Master List...")
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", expand_arrow
+        )
+        time.sleep(1)
+
+        # Fire the click exactly on the <a> tag to trigger the expanding javascript
+        driver.execute_script("arguments[0].click();", expand_arrow)
+        time.sleep(4)
         # 8. Evaluate Each Target Course from the Master List
         print("\n--- Evaluating Target Courses ---")
         for course in COURSES_TO_CHECK:
