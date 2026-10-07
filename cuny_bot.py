@@ -205,38 +205,54 @@ def check_all_classes():
         # 8. Evaluate Each Target Course from the Master List
         print("\n--- Evaluating Target Courses ---")
 
-        # 8a. NEW: Scroll down gently to force React to "lazy-load" the massive list of classes
-        print("Scrolling down to render all classes...")
-        for _ in range(8):
-            driver.execute_script("window.scrollBy(0, 600);")
-            time.sleep(0.5)
-
-        # Scroll back to the top to start a clean scan
-        driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(1)
-
         for course in COURSES_TO_CHECK:
             course_num = course["number"]
             target_prof = course["target_professor"]
 
             try:
-                print(f"Scanning for {course_num}...")
+                print(f"Scanning slowly for {course_num}...")
 
-                # Find the specific course header using an explicit wait and a relaxed search
-                course_header = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located(
-                        (
+                # Reset to the top of the page before searching for each course
+                driver.execute_script("window.scrollTo(0, 0);")
+                time.sleep(1.5)
+
+                course_header = None
+                found = False
+
+                # Slowly scroll down like a human (up to 40 times)
+                for _ in range(40):
+                    try:
+                        # Look for the course number on the screen
+                        course_header = driver.find_element(
                             By.XPATH,
-                            f"//*[contains(text(), '{course_num}') and not(self::script) and not(self::style)]",
+                            f"//*[contains(text(), ' {course_num} ') or contains(text(), '-{course_num}')]",
                         )
+
+                        # If we find it AND it's physically visible on the screen, stop scrolling!
+                        if course_header.is_displayed():
+                            print(f"Found {course_num} on screen!")
+                            found = True
+                            break
+                    except:
+                        pass  # Not on screen yet, keep scrolling
+
+                    # Scroll down a small amount and wait for the website to load the HTML
+                    driver.execute_script("window.scrollBy(0, 400);")
+                    time.sleep(1)  # Slow 1-second pause to let React render the classes
+
+                if not found:
+                    print(
+                        f"❌ {course_num}: Could not locate course in the master list even after scrolling."
                     )
-                )
+                    continue
+
+                # Center it to be safe before clicking
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block: 'center'});", course_header
                 )
                 time.sleep(1)
 
-                # Click it to drop down the table of sections
+                # Click the course header to reveal the table
                 driver.execute_script("arguments[0].click();", course_header)
                 time.sleep(2)
 
@@ -270,7 +286,7 @@ def check_all_classes():
                     print(f"❓ {course_num}: Status unknown.")
 
             except Exception as e:
-                print(f"❌ {course_num}: Could not locate course in the master list.")
+                print(f"❌ {course_num}: Error during evaluation. {e}")
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
