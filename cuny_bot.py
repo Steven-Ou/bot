@@ -22,17 +22,14 @@ COURSES_TO_CHECK = [
 
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Clicks the dropdown, types to filter the massive list, and selects the option."""
+    """Clicks the dropdown, types to filter the list, and explicitly clicks the visible option."""
     print(f"Setting {label_text} to {option_text}...")
 
     try:
         # 1. Find the exact text label and center it
         label = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located(
-                (
-                    By.XPATH,
-                    f"//*[contains(text(), '{label_text}') and not(self::script)]",
-                )
+                (By.XPATH, f"//*[normalize-space(text())='{label_text}']")
             )
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", label)
@@ -47,11 +44,40 @@ def select_custom_dropdown(driver, label_text, option_text):
 
         # 3. Type the option to filter the list instantly
         print(f"Typing '{option_text}' to filter the list...")
+        actions = ActionChains(driver)
         actions.send_keys(option_text).perform()
         time.sleep(2)  # Give the UI time to update the filtered list
 
-        # 4. Press Enter to lock in the explicitly filtered option
-        actions.send_keys(Keys.ENTER).perform()
+        # 4. Find the filtered option, ensure it is visible, and click it
+        print(f"Scrolling down to click '{option_text}'...")
+        options = driver.find_elements(
+            By.XPATH,
+            f"//*[normalize-space(text())='{option_text}' or contains(text(), '{option_text}')]",
+        )
+
+        clicked = False
+        for opt in options:
+            # Ignore hidden elements and script tags
+            if opt.is_displayed() and opt.tag_name.lower() not in ["script", "style"]:
+                # Ensure we aren't accidentally re-clicking the original form label
+                if abs(opt.location["y"] - label.location["y"]) > 10:
+                    try:
+                        driver.execute_script(
+                            "arguments[0].scrollIntoView({block: 'center'});", opt
+                        )
+                        time.sleep(0.5)
+                        driver.execute_script("arguments[0].click();", opt)
+                        clicked = True
+                        break
+                    except:
+                        pass
+
+        # 5. Ultimate Fallback: Just hit Enter to select the filtered option
+        if not clicked:
+            print("Could not explicitly click, pressing ENTER key...")
+            actions = ActionChains(driver)
+            actions.send_keys(Keys.ENTER).perform()
+
         time.sleep(1.5)
 
     except Exception as e:
@@ -96,21 +122,21 @@ def check_all_classes():
             # 2. Select Term
             select_custom_dropdown(driver, "Term", TERM_NAME)
 
-            # 3. Click Next (STRICT XPATH targeting buttons only)
+            # 3. Click Next (Find ALL Next items, click the first VISIBLE one)
             print("Clicking Next...")
-            next_btn = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located(
-                    (
-                        By.XPATH,
-                        "//button[contains(., 'Next')] | //input[@value='Next' or @title='Next']",
-                    )
+            next_buttons = WebDriverWait(driver, 15).until(
+                EC.presence_of_all_elements_located(
+                    (By.XPATH, "//*[normalize-space(text())='Next' or @value='Next']")
                 )
             )
-            driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'center'});", next_btn
-            )
-            time.sleep(1)
-            driver.execute_script("arguments[0].click();", next_btn)
+            for btn in next_buttons:
+                if btn.is_displayed():
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});", btn
+                    )
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].click();", btn)
+                    break
 
             print("Waiting for Page 2 to initialize...")
             time.sleep(5)
@@ -157,10 +183,8 @@ def check_all_classes():
             # 7. Uncheck "Show Open Classes Only"
             print("Toggling 'Open Classes Only' OFF...")
             try:
-                # Target the exact checkbox input or its wrapping label
                 toggle = driver.find_element(
-                    By.XPATH,
-                    "//input[@type='checkbox' and contains(@name, 'open')] | //*[contains(text(), 'Show Open Classes Only')]",
+                    By.XPATH, "//*[contains(text(), 'Show Open Classes Only')]"
                 )
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block: 'center'});", toggle
@@ -171,17 +195,19 @@ def check_all_classes():
             except Exception:
                 pass
 
-            # 8. Click Search (STRICT XPATH)
+            # 8. Click Search (Find ALL Search items, click the first VISIBLE one)
             print("Clicking Search...")
-            search_btn = driver.find_element(
-                By.XPATH,
-                "//button[contains(., 'Search') or contains(@title, 'Search')] | //input[@value='Search']",
+            search_buttons = driver.find_elements(
+                By.XPATH, "//*[normalize-space(text())='Search' or @value='Search']"
             )
-            driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'center'});", search_btn
-            )
-            time.sleep(1)
-            driver.execute_script("arguments[0].click();", search_btn)
+            for btn in search_buttons:
+                if btn.is_displayed():
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});", btn
+                    )
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].click();", btn)
+                    break
 
             # 9. Expand the results container
             print("Waiting for results...")
