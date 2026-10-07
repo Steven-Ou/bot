@@ -204,15 +204,32 @@ def check_all_classes():
         time.sleep(4)
         # 8. Evaluate Each Target Course from the Master List
         print("\n--- Evaluating Target Courses ---")
+
+        # 8a. NEW: Scroll down gently to force React to "lazy-load" the massive list of classes
+        print("Scrolling down to render all classes...")
+        for _ in range(8):
+            driver.execute_script("window.scrollBy(0, 600);")
+            time.sleep(0.5)
+
+        # Scroll back to the top to start a clean scan
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1)
+
         for course in COURSES_TO_CHECK:
             course_num = course["number"]
             target_prof = course["target_professor"]
 
             try:
-                # Find the specific course header
-                course_header = driver.find_element(
-                    By.XPATH,
-                    f"//*[contains(text(), ' {course_num} ') or contains(text(), '-{course_num}')]",
+                print(f"Scanning for {course_num}...")
+
+                # Find the specific course header using an explicit wait and a relaxed search
+                course_header = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(
+                        (
+                            By.XPATH,
+                            f"//*[contains(text(), '{course_num}') and not(self::script) and not(self::style)]",
+                        )
+                    )
                 )
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block: 'center'});", course_header
@@ -231,7 +248,7 @@ def check_all_classes():
 
                 if target_prof != "" and target_prof.lower() not in table_text.lower():
                     print(
-                        f"❌ {course_num}: Professor {target_prof} not found. Skipping."
+                        f"❌ {course_num}: Professor '{target_prof}' not found. Skipping."
                     )
                     continue
 
