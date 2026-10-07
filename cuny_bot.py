@@ -22,70 +22,36 @@ COURSES_TO_CHECK = [
 
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Opens the dropdown, filters the huge list, scrolls to the option, and clicks it."""
+    """Clicks the dropdown, types to filter the massive list, and selects the option."""
     print(f"Setting {label_text} to {option_text}...")
 
     try:
-        # 1. Find the exact text label and lock it in the center of the screen
+        # 1. Find the exact text label and center it
         label = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located(
                 (
                     By.XPATH,
-                    f"//*[text()='{label_text}' or normalize-space(text())='{label_text}']",
+                    f"//*[contains(text(), '{label_text}') and not(self::script)]",
                 )
             )
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", label)
         time.sleep(1)
 
-        # 2. Open the dropdown menu (Targets the box directly next to the label)
-        try:
-            dropdown_container = label.find_element(
-                By.XPATH, "./following-sibling::*[1]"
-            )
-            driver.execute_script("arguments[0].click();", dropdown_container)
-        except Exception:
-            # Fallback if structure changes: move down 50 pixels to clear all padding
-            actions = ActionChains(driver)
-            actions.move_to_element(label).move_by_offset(0, 50).click().perform()
+        # 2. Move mouse just below the label to click the dropdown container
+        actions = ActionChains(driver)
+        actions.move_to_element(label).move_by_offset(0, 45).click().perform()
 
-        print("Waiting for the massive dropdown list to appear...")
-        time.sleep(2.5)  # Critical wait for the huge list to fetch and render
+        print("Waiting for the massive dropdown list to drop down...")
+        time.sleep(2)
 
         # 3. Type the option to filter the list instantly
         print(f"Typing '{option_text}' to filter the list...")
-        actions = ActionChains(driver)
         actions.send_keys(option_text).perform()
-        time.sleep(2)  # Give the UI time to update the list
+        time.sleep(2)  # Give the UI time to update the filtered list
 
-        # 4. Scroll down the huge list and explicitly click the text
-        print(f"Scrolling down to click '{option_text}'...")
-        options = driver.find_elements(
-            By.XPATH,
-            f"//*[text()='{option_text}' or normalize-space(text())='{option_text}']",
-        )
-
-        success = False
-        for opt in options:
-            try:
-                # Make sure we don't accidentally click the original label again
-                if opt != label and opt.tag_name.lower() not in ["input"]:
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({block: 'center'});", opt
-                    )
-                    time.sleep(0.5)
-                    driver.execute_script("arguments[0].click();", opt)
-                    success = True
-                    break
-            except Exception:
-                continue
-
-        # 5. Ultimate Fallback: Just hit Enter to select the filtered option
-        if not success:
-            print("Could not explicitly click, pressing ENTER key...")
-            actions = ActionChains(driver)
-            actions.send_keys(Keys.ENTER).perform()
-
+        # 4. Press Enter to lock in the explicitly filtered option
+        actions.send_keys(Keys.ENTER).perform()
         time.sleep(1.5)
 
     except Exception as e:
@@ -119,6 +85,9 @@ def check_all_classes():
                     (By.XPATH, f"//label[contains(text(), '{INSTITUTION_NAME}')]")
                 )
             )
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", inst_checkbox
+            )
             driver.execute_script("arguments[0].click();", inst_checkbox)
 
             print("Waiting for background data to load...")
@@ -127,11 +96,14 @@ def check_all_classes():
             # 2. Select Term
             select_custom_dropdown(driver, "Term", TERM_NAME)
 
-            # 3. Click Next
+            # 3. Click Next (STRICT XPATH targeting buttons only)
             print("Clicking Next...")
             next_btn = WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, "//*[text()='Next' or contains(text(), 'Next')]")
+                    (
+                        By.XPATH,
+                        "//button[contains(., 'Next')] | //input[@value='Next' or @title='Next']",
+                    )
                 )
             )
             driver.execute_script(
@@ -168,7 +140,7 @@ def check_all_classes():
                     EC.presence_of_element_located(
                         (
                             By.XPATH,
-                            "//input[@placeholder='Course Number' or contains(@aria-label, 'Course')]",
+                            "//input[contains(@placeholder, 'Course') or contains(@name, 'Course') or contains(@aria-label, 'Course')]",
                         )
                     )
                 )
@@ -185,8 +157,10 @@ def check_all_classes():
             # 7. Uncheck "Show Open Classes Only"
             print("Toggling 'Open Classes Only' OFF...")
             try:
+                # Target the exact checkbox input or its wrapping label
                 toggle = driver.find_element(
-                    By.XPATH, "//*[contains(text(), 'Show Open Classes Only')]"
+                    By.XPATH,
+                    "//input[@type='checkbox' and contains(@name, 'open')] | //*[contains(text(), 'Show Open Classes Only')]",
                 )
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block: 'center'});", toggle
@@ -197,10 +171,11 @@ def check_all_classes():
             except Exception:
                 pass
 
-            # 8. Click Search
+            # 8. Click Search (STRICT XPATH)
             print("Clicking Search...")
             search_btn = driver.find_element(
-                By.XPATH, "//button[contains(text(), 'Search') or @value='Search']"
+                By.XPATH,
+                "//button[contains(., 'Search') or contains(@title, 'Search')] | //input[@value='Search']",
             )
             driver.execute_script(
                 "arguments[0].scrollIntoView({block: 'center'});", search_btn
