@@ -1,5 +1,7 @@
 import time
 import requests
+import os
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -8,12 +10,14 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+load_dotenv()
+
 # --- CONFIGURATION ---
 INSTITUTION_NAME = "Queens College"
 TERM_NAME = "2027 Spring Term"
 SUBJECT_NAME = "Computer Science"
 CHECK_INTERVAL = 120
-WEBHOOK_URL = "https://discord.com/api/webhooks/1557076166660071518/7nx3NOi714rSf4dbuMheNfvUUjC6o1ksnWCkJHpw83JCSIOzBsqXQR4ZeMiEJFsa73IG"
+WEBHOOK_URL = os.getenv("CUNY_WEBHOOK_URL")
 
 COURSES_TO_CHECK = [
     {"number": "370", "target_professor": ""},
