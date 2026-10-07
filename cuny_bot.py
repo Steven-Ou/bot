@@ -2,7 +2,6 @@ import time
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -21,48 +20,40 @@ COURSES_TO_CHECK = [
 
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Helper function to reliably handle CUNY's React-based dynamic dropdowns."""
+    """Forces clicks on React-based dropdowns instead of typing into hidden inputs."""
     print(f"Setting {label_text} to {option_text}...")
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located(
-            (By.XPATH, f"//*[contains(text(), '{label_text}')]")
-        )
-    )
 
     try:
-        # Strategy 1: Target the hidden input box, type the text, and hit Enter
-        input_box = driver.find_element(
-            By.XPATH, f"//*[contains(text(), '{label_text}')]/following::input[1]"
+        # Click the dropdown container to expand the options
+        dropdown_container = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    f"//*[contains(text(), '{label_text}')]/following-sibling::div | //*[contains(text(), '{label_text}')]/..//div[contains(@class, 'indicatorContainer')]",
+                )
+            )
         )
-        driver.execute_script("arguments[0].scrollIntoView(true);", input_box)
-
-        # Clear field and type new value
-        input_box.send_keys(Keys.CONTROL + "a")
-        input_box.send_keys(Keys.BACKSPACE)
-        input_box.send_keys(option_text)
-        time.sleep(1.5)  # Wait for autocomplete to filter
-        input_box.send_keys(Keys.ENTER)
-        return
-    except Exception:
-        pass  # Fallback to Strategy 2 if input isn't interactable
-
-    try:
-        # Strategy 2: Click the dropdown container and select the rendered text option
-        dropdown_container = driver.find_element(
-            By.XPATH, f"//*[contains(text(), '{label_text}')]/following-sibling::div"
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", dropdown_container
         )
+        time.sleep(1)
         driver.execute_script("arguments[0].click();", dropdown_container)
-        time.sleep(2)  # Give the CSS animation time to open the menu
 
-        option_element = driver.find_element(
-            By.XPATH, f"//*[contains(text(), '{option_text}')]"
+        time.sleep(2)  # Give the dropdown menu time to visually open
+
+        # Find the option and click it
+        option_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    f"//*[text()='{option_text}' or contains(text(), '{option_text}')]",
+                )
+            )
         )
         driver.execute_script("arguments[0].click();", option_element)
-        return
+        time.sleep(1)
     except Exception as e:
-        raise Exception(
-            f"Failed to set {label_text}. The element may not be fully loaded. Error: {e}"
-        )
+        raise Exception(f"Failed to set {label_text}. Error: {e}")
 
 
 def check_all_classes():
@@ -104,9 +95,15 @@ def check_all_classes():
             time.sleep(1)
 
             # 4. Click Next
-            next_btn = driver.find_element(
-                By.XPATH, "//button[contains(text(), 'Next')]"
+            next_btn = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[text()='Next' or contains(text(), 'Next')]")
+                )
             )
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", next_btn
+            )
+            time.sleep(1)
             driver.execute_script("arguments[0].click();", next_btn)
 
             # CRITICAL WAIT: Must allow the second page time to initialize its subject lists
@@ -144,7 +141,7 @@ def check_all_classes():
 
             # 8. Click Search
             search_btn = driver.find_element(
-                By.XPATH, "//button[contains(text(), 'Search')]"
+                By.XPATH, "//button[contains(text(), 'Search') or @value='Search']"
             )
             driver.execute_script("arguments[0].click();", search_btn)
 
@@ -188,7 +185,9 @@ def check_all_classes():
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
-        driver.save_screenshot("error_screenshot_2.jpg")
+        driver.save_screenshot(
+            "error_screenshot.png"
+        )  # Updated to .png to clear the warning
     finally:
         driver.quit()
 
