@@ -22,11 +22,11 @@ COURSES_TO_CHECK = [
 
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Centers the label on the screen, clicks directly below it, and types the option."""
+    """Opens the dropdown, filters the huge list, scrolls to the option, and clicks it."""
     print(f"Setting {label_text} to {option_text}...")
 
     try:
-        # 1. Find the exact text label
+        # 1. Find the exact text label and lock it in the center of the screen
         label = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located(
                 (
@@ -35,22 +35,58 @@ def select_custom_dropdown(driver, label_text, option_text):
                 )
             )
         )
-
-        # 2. CRITICAL: Scroll the element to the absolute center of the page
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", label)
-        time.sleep(1.5)
+        time.sleep(1)
 
-        # 3. Move mouse to the label, drop down 40 pixels into the input box, and click
-        actions = ActionChains(driver)
-        actions.move_to_element(label).move_by_offset(0, 40).click().perform()
-        time.sleep(1.5)
+        # 2. Open the dropdown menu (Targets the box directly next to the label)
+        try:
+            dropdown_container = label.find_element(
+                By.XPATH, "./following-sibling::*[1]"
+            )
+            driver.execute_script("arguments[0].click();", dropdown_container)
+        except Exception:
+            # Fallback if structure changes: move down 50 pixels to clear all padding
+            actions = ActionChains(driver)
+            actions.move_to_element(label).move_by_offset(0, 50).click().perform()
 
-        # 4. Type the text to filter the React menu and press Enter
+        print("Waiting for the massive dropdown list to appear...")
+        time.sleep(2.5)  # Critical wait for the huge list to fetch and render
+
+        # 3. Type the option to filter the list instantly
+        print(f"Typing '{option_text}' to filter the list...")
         actions = ActionChains(driver)
         actions.send_keys(option_text).perform()
+        time.sleep(2)  # Give the UI time to update the list
+
+        # 4. Scroll down the huge list and explicitly click the text
+        print(f"Scrolling down to click '{option_text}'...")
+        options = driver.find_elements(
+            By.XPATH,
+            f"//*[text()='{option_text}' or normalize-space(text())='{option_text}']",
+        )
+
+        success = False
+        for opt in options:
+            try:
+                # Make sure we don't accidentally click the original label again
+                if opt != label and opt.tag_name.lower() not in ["input"]:
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});", opt
+                    )
+                    time.sleep(0.5)
+                    driver.execute_script("arguments[0].click();", opt)
+                    success = True
+                    break
+            except Exception:
+                continue
+
+        # 5. Ultimate Fallback: Just hit Enter to select the filtered option
+        if not success:
+            print("Could not explicitly click, pressing ENTER key...")
+            actions = ActionChains(driver)
+            actions.send_keys(Keys.ENTER).perform()
+
         time.sleep(1.5)
-        actions.send_keys(Keys.ENTER).perform()
-        time.sleep(1)
 
     except Exception as e:
         raise Exception(f"Failed to set {label_text}. Error: {e}")
@@ -123,19 +159,24 @@ def check_all_classes():
                 driver.execute_script("arguments[0].click();", add_criteria)
                 time.sleep(1.5)
             except Exception:
-                pass  # Continue if already expanded or missing
+                pass
 
             # 6. Enter Course Number
             print("Entering Course Number...")
             try:
-                course_input = driver.find_element(
-                    By.XPATH,
-                    "//input[contains(@name, 'Course') or contains(@aria-label, 'Course') or @placeholder='Course Number' or ../preceding-sibling::*[contains(text(), 'Course Number')]]",
+                course_input = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located(
+                        (
+                            By.XPATH,
+                            "//input[@placeholder='Course Number' or contains(@aria-label, 'Course')]",
+                        )
+                    )
                 )
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block: 'center'});", course_input
                 )
                 time.sleep(1)
+                course_input.clear()
                 course_input.send_keys(course_num)
                 time.sleep(1)
             except Exception as e:
