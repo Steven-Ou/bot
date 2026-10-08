@@ -28,9 +28,7 @@ INSTRUCTION_MODES = ["In Person", "Online Synchronous"]
 
 
 def select_custom_dropdown(driver, label_text, option_text):
-    """Restored the robust click/scroll logic that successfully passed steps 1 and 2."""
     print(f"Setting {label_text} to {option_text}...")
-
     try:
         # 1. Find the exact text label and center it
         label = WebDriverWait(driver, 15).until(
@@ -113,7 +111,6 @@ def check_all_classes():
             "arguments[0].scrollIntoView({block: 'center'});", inst_checkbox
         )
         driver.execute_script("arguments[0].click();", inst_checkbox)
-
         time.sleep(3)
 
         # 2. Select Term
@@ -186,128 +183,109 @@ def check_all_classes():
                 break
 
         print("Waiting for Master List to load...")
-        # Using the exact ID and aria-label revealed in the DevTools screenshot
         expand_arrow = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located(
                 (
                     By.XPATH,
-                    "//a[@id='imageDivLink_inst0' or contains(@aria-label, 'Class Section')]",
+                    "//a[contains(@id, 'imageDivLink') or contains(@aria-label, 'Class Section')]",
                 )
             )
         )
-        time.sleep(1)
 
         print("Clicking the arrow to expand the Master List...")
         driver.execute_script(
             "arguments[0].scrollIntoView({block: 'center'});", expand_arrow
         )
         time.sleep(1)
-
-        # Fire the click exactly on the <a> tag to trigger the expanding javascript
         driver.execute_script("arguments[0].click();", expand_arrow)
-        time.sleep(4)
-        # 8. Single-Pass Scanner: Scrape and Compare
+
+        print("Waiting for the massive class folder to open...")
+        content_div = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located(
+                (By.XPATH, "//div[contains(@id, 'contentDivImg')]")
+            )
+        )
+        time.sleep(2)
+
         print("\n--- Evaluating Target Courses ---")
+        for course in COURSES_TO_CHECK:
+            course_num = course["number"]
+            target_prof = course["target_professor"]
 
-        # Create a checklist of courses we still need to find
-        courses_left = list(COURSES_TO_CHECK)
+            try:
+                print(f"-> Scanning the open folder for {course_num}...")
+                course_headers = content_div.find_elements(
+                    By.XPATH, f".//*[contains(text(), '{course_num}')]"
+                )
 
-        # Reset to the top of the page to start the scan
-        driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(1.5)
+                if not course_headers:
+                    print(
+                        f"❌ ERROR: Bot cannot see '{course_num}' anywhere. Dumping first 150 chars of folder:"
+                    )
+                    print(content_div.text[:150].replace("\n", " | "))
+                    continue
 
-        # Slowly scroll down the page in one single pass (up to 50 ticks)
-        for _ in range(50):
-            if not courses_left:
-                print("\n✅ All target courses evaluated!")
-                break
+                target_header = None
+                for header in course_headers:
+                    text = header.text.strip()
+                    if course_num in text and len(text) < 100:
+                        target_header = header
+                        break
 
-            # At our current scroll position, scan the visible screen for our missing courses
-            for course in list(courses_left):
-                course_num = course["number"]
-                target_prof = course["target_professor"]
+                if not target_header:
+                    print(
+                        f"❌ ERROR: Found '{course_num}' in the code, but it's completely invisible on the screen."
+                    )
+                    continue
+
+                print(f"✅ Found '{target_header.text}'! Clicking to open its table...")
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block: 'center'});", target_header
+                )
+                time.sleep(1.5)
+                driver.execute_script("arguments[0].click();", target_header)
+                time.sleep(2)
 
                 try:
-                    # Grab any element containing the course number
-                    elements = driver.find_elements(
-                        By.XPATH, f"//*[contains(text(), '{course_num}')]"
+                    course_table = target_header.find_element(
+                        By.XPATH, "./following::table[1]"
+                    )
+                    table_text = course_table.text
+
+                    if (
+                        target_prof != ""
+                        and target_prof.lower() not in table_text.lower()
+                    ):
+                        print(
+                            f"❌ {course_num}: Professor '{target_prof}' not found. Skipping."
+                        )
+                        continue
+
+                    prof_label = f"(Prof: {target_prof})" if target_prof else ""
+
+                    if "Wait List" in table_text:
+                        print(f"⚠️ WAITLIST seats available for {course_num}!")
+                        trigger_notification(
+                            f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
+                        )
+                    elif "Open" in table_text and "Closed" not in table_text:
+                        print(f"🚨 OPEN seats for {course_num}!")
+                        trigger_notification(
+                            f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
+                        )
+                    elif "Closed" in table_text:
+                        print(f"🔒 {course_num}: Sections are Closed.")
+                    else:
+                        print(
+                            f"❓ {course_num}: Status unknown. Raw table text: {table_text[:50]}..."
+                        )
+                except Exception as e:
+                    print(
+                        f"❌ ERROR: Opened '{course_num}' but couldn't find or read the class table. {e}"
                     )
 
-                    for el in elements:
-                        text = el.text.strip()
-                        # CRITICAL FIX: Ensure we only click the actual header (e.g., "CSCI 370 - Data Structures")
-                        # by ignoring massive page wrappers (which have thousands of characters of text)
-                        if course_num in text and len(text) < 120 and el.is_displayed():
-                            print(f"Found {course_num} on screen! Expanding...")
-
-                            # Lock it in the center of the screen
-                            driver.execute_script(
-                                "arguments[0].scrollIntoView({block: 'center'});", el
-                            )
-                            time.sleep(1)
-
-                            # Click the header to reveal the class table
-                            driver.execute_script("arguments[0].click();", el)
-                            time.sleep(2)
-
-                            try:
-                                # Scrape the specific table that appears underneath the header
-                                course_table = el.find_element(
-                                    By.XPATH, "./following::table[1]"
-                                )
-                                table_text = course_table.text
-
-                                if (
-                                    target_prof != ""
-                                    and target_prof.lower() not in table_text.lower()
-                                ):
-                                    print(
-                                        f"❌ {course_num}: Professor '{target_prof}' not found. Skipping."
-                                    )
-                                else:
-                                    prof_label = (
-                                        f"(Prof: {target_prof})" if target_prof else ""
-                                    )
-
-                                    if "Wait List" in table_text:
-                                        print(
-                                            f"⚠️ WAITLIST seats available for {course_num}!"
-                                        )
-                                        trigger_notification(
-                                            f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                                        )
-                                    elif (
-                                        "Open" in table_text
-                                        and "Closed" not in table_text
-                                    ):
-                                        print(f"🚨 OPEN seats for {course_num}!")
-                                        trigger_notification(
-                                            f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                                        )
-                                    elif "Closed" in table_text:
-                                        print(f"🔒 {course_num}: Sections are Closed.")
-                                    else:
-                                        print(f"❓ {course_num}: Status unknown.")
-                            except Exception:
-                                print(
-                                    f"❌ {course_num}: Expanded the header but couldn't read the table."
-                                )
-
-                            # Cross this course off our checklist so we don't evaluate it again
-                            courses_left.remove(course)
-                            break  # Break out of the element loop and continue scanning
-                except Exception:
-                    pass  # Ignore stale elements or screen shifts, just keep scrolling
-
-            # Scroll down exactly one chunk to load the next set of classes
-            driver.execute_script("window.scrollBy(0, 400);")
-            time.sleep(1.5)  # Wait for React to render the new elements into the HTML
-
-        # If the scan reaches the bottom and items are still on the checklist
-        for missing in courses_left:
-            print(
-                f"❌ {missing['number']}: Could not locate course after scanning the entire master list."
-            )
+            except Exception as e:
+                print(f"❌ ERROR: Crash while processing {course_num}. {e}")
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
@@ -318,7 +296,8 @@ def check_all_classes():
 
 def trigger_notification(message):
     print("\a")
-    if WEBHOOK_URL != "":
+    # Failsafe: if dotenv fails, do not try to post to a 'None' URL
+    if WEBHOOK_URL and WEBHOOK_URL.startswith("http"):
         data = {
             "username": "CUNY Tracker",
             "content": f"🚨 **ALERT!** 🚨\n{message}\nLink: https://globalsearch.cuny.edu/CFGlobalSearchTool/search.jsp",
@@ -329,6 +308,10 @@ def trigger_notification(message):
                 print("✅ Successfully pinged your Discord!")
         except Exception as e:
             print(f"⚠️ Error connecting to Discord: {e}")
+    else:
+        print(
+            "⚠️ Discord Webhook not sent: WEBHOOK_URL is missing or invalid in your .env file."
+        )
 
 
 if __name__ == "__main__":
