@@ -196,9 +196,8 @@ def check_all_classes():
                 (By.XPATH, "//div[contains(@id, 'contentDivImg')]")
             )
         )
-        time.sleep(3)  # Let the accordion animation fully drop down
+        time.sleep(3)
 
-        # 8. Direct Targeting: Extract the exact course without blind scrolling
         print("\n--- Evaluating Target Courses (Direct Targeting) ---")
 
         for course in COURSES_TO_CHECK:
@@ -207,8 +206,6 @@ def check_all_classes():
 
             try:
                 print(f"-> Targeting '{course_num}' in the DOM...")
-
-                # Fetch all nested elements containing the course number
                 elements = content_div.find_elements(
                     By.XPATH, f".//*[contains(., '{course_num}')]"
                 )
@@ -216,13 +213,10 @@ def check_all_classes():
                 target_header = None
                 header_title = ""
 
-                # Iterate in reverse to target the specific text span, ignoring massive background wrappers
                 for el in reversed(elements):
-                    # Use Javascript to extract text, completely bypassing Selenium's finicky visibility rules
                     text = driver.execute_script(
                         "return arguments[0].textContent;", el
                     ).strip()
-
                     if course_num in text and 0 < len(text) < 150:
                         target_header = el
                         header_title = text
@@ -235,7 +229,6 @@ def check_all_classes():
                     continue
 
                 print(f"✅ Found '{header_title}'! Scrolling directly to it...")
-                # Instantly center the hidden element on the screen so it becomes visible
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block: 'center'});", target_header
                 )
@@ -243,15 +236,18 @@ def check_all_classes():
 
                 print(f"Clicking to open its table...")
                 driver.execute_script("arguments[0].click();", target_header)
-                time.sleep(2)
+                time.sleep(3)  # Ensure the server has time to fetch the class rows
 
                 try:
                     course_table = target_header.find_element(
                         By.XPATH, "./following::table[1]"
                     )
-                    table_text = driver.execute_script(
-                        "return arguments[0].textContent;", course_table
-                    )
+
+                    # 1. Grab visible text for the Professor check
+                    table_text = course_table.text
+
+                    # 2. Grab RAW HTML to read the hidden image tags for Open/Closed/Waitlist indicators
+                    table_html = course_table.get_attribute("outerHTML")
 
                     if (
                         target_prof != ""
@@ -264,22 +260,34 @@ def check_all_classes():
 
                     prof_label = f"(Prof: {target_prof})" if target_prof else ""
 
-                    if "Wait List" in table_text:
+                    # Check the RAW HTML for the image alt tags or titles
+                    if "Wait List" in table_html or "Wait List" in table_text:
                         print(f"⚠️ WAITLIST seats available for {course_num}!")
                         trigger_notification(
                             f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
                         )
-                    elif "Open" in table_text and "Closed" not in table_text:
+                    elif (
+                        'alt="Open"' in table_html
+                        or 'title="Open"' in table_html
+                        or 'aria-label="Open"' in table_html
+                        or "Open" in table_text
+                    ):
                         print(f"🚨 OPEN seats for {course_num}!")
                         trigger_notification(
                             f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
                         )
-                    elif "Closed" in table_text:
+                    elif (
+                        'alt="Closed"' in table_html
+                        or 'title="Closed"' in table_html
+                        or 'aria-label="Closed"' in table_html
+                        or "Closed" in table_text
+                    ):
                         print(f"🔒 {course_num}: Sections are Closed.")
                     else:
                         print(
-                            f"❓ {course_num}: Status unknown. Raw table text: {table_text[:50].strip()}..."
+                            f"❓ {course_num}: Status unknown. Raw HTML snippet: {table_html[:150]}..."
                         )
+
                 except Exception as e:
                     print(
                         f"❌ ERROR: Opened '{course_num}' but couldn't read the class table. {e}"
