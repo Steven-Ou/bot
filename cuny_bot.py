@@ -208,84 +208,81 @@ def check_all_classes():
         time.sleep(2)
 
         print("\n--- Evaluating Target Courses ---")
-        for course in COURSES_TO_CHECK:
-            course_num = course["number"]
-            target_prof = course["target_professor"]
-
-            try:
-                print(f"-> Scanning the open folder for {course_num}...")
-                course_headers = content_div.find_elements(
-                    By.XPATH, f".//*[contains(text(), '{course_num}')]"
-                )
-
-                if not course_headers:
-                    print(
-                        f"❌ ERROR: Bot cannot see '{course_num}' anywhere. Dumping first 150 chars of folder:"
-                    )
-                    print(content_div.text[:150].replace("\n", " | "))
-                    continue
-
-                target_header = None
-                for header in course_headers:
-                    text = header.text.strip()
-                    if course_num in text and len(text) < 100:
-                        target_header = header
-                        break
-
-                if not target_header:
-                    print(
-                        f"❌ ERROR: Found '{course_num}' in the code, but it's completely invisible on the screen."
-                    )
-                    continue
-
-                print(f"✅ Found '{target_header.text}'! Clicking to open its table...")
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center'});", target_header
-                )
-                time.sleep(1.5)
-                driver.execute_script("arguments[0].click();", target_header)
-                time.sleep(2)
-
+        
+        # Create a checklist of courses we still need to find
+        courses_left = list(COURSES_TO_CHECK)
+        
+        # Reset to the top of the page to start the scan
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1.5)
+        
+        # Slowly scroll down the page in one single pass (up to 50 ticks)
+        for _ in range(50):
+            if not courses_left:
+                print("\n✅ All target courses evaluated!")
+                break
+                
+            # At our current scroll position, scan the visible screen for our missing courses
+            for course in list(courses_left):
+                course_num = course["number"]
+                target_prof = course["target_professor"]
+                
                 try:
-                    course_table = target_header.find_element(
-                        By.XPATH, "./following::table[1]"
-                    )
-                    table_text = course_table.text
+                    # Look for the header text on the current screen
+                    headers = driver.find_elements(By.XPATH, f"//*[contains(text(), '{course_num}') and not(self::script) and not(self::style)]")
+                    
+                    for header in headers:
+                        text = header.text.strip()
+                        # Verify it's the actual course header (e.g., "CSCI 370 - Software Engineering")
+                        if course_num in text and len(text) < 100 and header.is_displayed():
+                            
+                            print(f"Found {course_num} on screen! Expanding...")
+                            
+                            # Lock it in the center of the screen
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", header)
+                            time.sleep(1.5)
+                            
+                            # Click the header to reveal the class table
+                            driver.execute_script("arguments[0].click();", header)
+                            time.sleep(2) 
+                            
+                            try:
+                                # Scrape the specific table that appears underneath the header
+                                course_table = header.find_element(By.XPATH, "./following::table[1]")
+                                table_text = course_table.text
+                                
+                                if target_prof != "" and target_prof.lower() not in table_text.lower():
+                                    print(f"❌ {course_num}: Professor '{target_prof}' not found. Skipping.")
+                                else:
+                                    prof_label = f"(Prof: {target_prof})" if target_prof else ""
+                                    
+                                    if "Wait List" in table_text:
+                                        print(f"⚠️ WAITLIST seats available for {course_num}!")
+                                        trigger_notification(f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}")
+                                    elif "Open" in table_text and "Closed" not in table_text:
+                                        print(f"🚨 OPEN seats for {course_num}!")
+                                        trigger_notification(f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}")
+                                    elif "Closed" in table_text:
+                                        print(f"🔒 {course_num}: Sections are Closed.")
+                                    else:
+                                        print(f"❓ {course_num}: Status unknown.")
+                            except Exception as e:
+                                print(f"❌ ERROR: Opened '{course_num}' but couldn't read the class table. {e}")
+                                
+                            # Cross this course off our checklist so we don't evaluate it again
+                            courses_left.remove(course)
+                            break # Break out of the element loop and continue scanning
+                except Exception:
+                    pass # Ignore stale elements or screen shifts, just keep scrolling
+            
+            # Scroll down exactly one chunk to load the next set of classes into the HTML
+            driver.execute_script("window.scrollBy(0, 500);")
+            time.sleep(1.5) # Wait for React to render the new elements
+            
+        # If the scan reaches the bottom and items are still on the checklist
+        for missing in courses_left:
+            print(f"❌ {missing['number']}: Could not locate course after scanning the entire list.")
 
-                    if (
-                        target_prof != ""
-                        and target_prof.lower() not in table_text.lower()
-                    ):
-                        print(
-                            f"❌ {course_num}: Professor '{target_prof}' not found. Skipping."
-                        )
-                        continue
-
-                    prof_label = f"(Prof: {target_prof})" if target_prof else ""
-
-                    if "Wait List" in table_text:
-                        print(f"⚠️ WAITLIST seats available for {course_num}!")
-                        trigger_notification(
-                            f"Waitlist seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                        )
-                    elif "Open" in table_text and "Closed" not in table_text:
-                        print(f"🚨 OPEN seats for {course_num}!")
-                        trigger_notification(
-                            f"OPEN seats found for {SUBJECT_NAME} {course_num}! {prof_label}"
-                        )
-                    elif "Closed" in table_text:
-                        print(f"🔒 {course_num}: Sections are Closed.")
-                    else:
-                        print(
-                            f"❓ {course_num}: Status unknown. Raw table text: {table_text[:50]}..."
-                        )
-                except Exception as e:
-                    print(
-                        f"❌ ERROR: Opened '{course_num}' but couldn't find or read the class table. {e}"
-                    )
-
-            except Exception as e:
-                print(f"❌ ERROR: Crash while processing {course_num}. {e}")
 
     except Exception as e:
         print(f"An error occurred while navigating: {e}")
